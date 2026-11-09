@@ -1020,7 +1020,7 @@ public partial class MainWindow : Window
     {
         "sk.line", "sk.centerline", "sk.rect", "sk.rect_center", "sk.rect_3p", "sk.circle", "sk.circle_2p", "sk.circle3",
         "sk.arc3", "sk.arc_center", "sk.arc_tangent", "sk.ellipse", "sk.ellipse_5p", "sk.spline_through", "sk.spline_cv",
-        "sk.slot", "sk.polygon", "sk.gear", "sk.point", "sk.text", "sk.image", "sk.csys",
+        "sk.slot", "sk.polygon", "sk.gear", "sk.point", "sk.text", "sk.image", "sk.image_paste", "sk.csys",
     };
 
     /// <summary>k98: панель настройки эскиза (первая слева в эскизе).</summary>

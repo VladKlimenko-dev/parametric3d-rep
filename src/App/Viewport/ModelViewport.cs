@@ -396,6 +396,7 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
 
             if (_overlayDirty || GridStale()) { _overlayDirty = false; var (g, l, pt) = BuildOverlay(); _r.SetOverlay(g, l, pt); _r.SetOverlayFill(_ovFill, _ovFillColor); }
             _r.SketchMode = ActiveSketch != null;
+            _r.SetOverlayImages(SketchImagesForGl());
             if (_flagsDirty) { ApplyFlags(); _flagsDirty = false; }
             using (Diagnostics.UiTimes.Measure("вид: кадр")) _r.Draw(f, fb);
 
