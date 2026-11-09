@@ -802,7 +802,8 @@ public static class StepImport
             else { if (ExtDbg) Console.Error.WriteLine("NURBSEXT   Extended returned null"); break; }
         }
     }
-    static readonly bool NurbsExtendOff = Environment.GetEnvironmentVariable("P3D_NURBSEXTEND") == "0";
+    // ВЫКЛЮЧЕНО ПО УМОЛЧАНИЮ (P3D_NURBSEXTEND=1 — включить): корпус k185e — 11 тел стали открытыми, объёмы 54 деталей сдвинулись
+    static readonly bool NurbsExtendOff = Environment.GetEnvironmentVariable("P3D_NURBSEXTEND") != "1";
     static readonly bool ExtDbg = Environment.GetEnvironmentVariable("P3D_EXTDBG") == "1";
     /// <summary>k185: граней, чья B-поверхность продлена до рёбер (разбор).</summary>
     public static long NurbsExtended;

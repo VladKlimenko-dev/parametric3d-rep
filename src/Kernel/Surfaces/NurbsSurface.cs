@@ -674,7 +674,8 @@ public sealed class NurbsSurface : ISurface3
         var nn = Vector3d.Cross(Su, Sv); if (nn.LengthSquared < 1e-30) return null;
         return (uv, S, nn.Normalized());
     }
-    static readonly bool ProjExtDampOff = Environment.GetEnvironmentVariable("P3D_PROJEXTDAMP") == "0";
+    // ВЫКЛЮЧЕНО ПО УМОЛЧАНИЮ (P3D_PROJEXTDAMP=1 — включить): не проверено на корпусе отдельно от продления поверхностей
+    static readonly bool ProjExtDampOff = Environment.GetEnvironmentVariable("P3D_PROJEXTDAMP") != "1";
 
     /// <summary>
     /// k144: ТА ЖЕ ПОВЕРХНОСТЬ НА БОЛЬШЕЙ ОБЛАСТИ — точное продолжение крайних промежутков (те же многочлены, что у
