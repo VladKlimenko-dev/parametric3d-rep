@@ -53,8 +53,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185v_allA, cmd: 'allA', env: '' }
-          - { name: k185v_allB, cmd: 'allB', env: '' }
+          - { name: k185x_allA, cmd: 'allA', env: '' }
+          - { name: k185x_allB, cmd: 'allB', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
