@@ -27,8 +27,15 @@ if (-not (IsClone $PWD.Path)) {
         Set-Location -Path $clone
     } else {
         Write-Host "Эта папка — не клон репозитория ($($PWD.Path)), и клона нет в $clone." -ForegroundColor Yellow
-        $ans = Read-Host "Скачать репозиторий в $clone? (Y/N)"
+        $ans = Read-Host "Скачать репозиторий в $($clone)? (Y/N)"
         if ($ans -notmatch '^(y|д)') { Fail 'Без клона обновление невозможно.' }
+        # папка уже есть, но это не клон (остатки после удаления, распакованный zip): переименовывается, клон — на её место
+        if ((Test-Path $clone) -and (Get-ChildItem -Force $clone | Select-Object -First 1)) {
+            $old = "$clone.old-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+            Write-Host "Папка $clone уже есть и не является клоном — переименовываю в $old" -ForegroundColor Yellow
+            try { Rename-Item -Path $clone -NewName (Split-Path $old -Leaf) -ErrorAction Stop }
+            catch { Fail "Не удалось переименовать $clone (открыта в другой программе?). Закройте программы, работающие с ней, или удалите папку вручную." }
+        }
         git clone $repoUrl $clone
         if ($LASTEXITCODE -ne 0) { Fail 'git clone не удался (нет сети?).' }
         Set-Location -Path $clone
