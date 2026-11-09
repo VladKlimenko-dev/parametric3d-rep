@@ -152,7 +152,13 @@ static partial class Program
     {
         sldStage = "read XT";
         int lim = int.TryParse(Environment.GetEnvironmentVariable("P3D_SLDTIMEOUT"), out var l) ? l : 300;
-        var t = Task.Run(work);
+        // k185: разбор — в контексте ядра с отменой: по превышению времени он останавливается на ближайшей точке прерывания.
+        // Прежде брошенный разбор считал дальше в фоне и отнимал процессор у следующих файлов (6169K406: перевод 352 с вместо
+        // 10 с после таймаута соседа). Мутация P3D_SLDCANCEL=0.
+        using var cts = new CancellationTokenSource();
+        bool cancelOn = Environment.GetEnvironmentVariable("P3D_SLDCANCEL") != "0";
+        var kctx = (Parametric3D.Kernel.KernelContext.Current ?? new Parametric3D.Kernel.KernelContext()).WithCancellation(cts.Token);
+        var t = cancelOn ? Task.Run(() => { using var _ = kctx.Enter(); work(); }) : Task.Run(work);
         bool done;
         try { done = t.Wait(TimeSpan.FromSeconds(lim)); }
         catch (AggregateException ae) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ae.InnerException ?? ae).Throw(); throw; }
@@ -161,6 +167,12 @@ static partial class Program
             Log(new { test = "sldprt", file = name, timeout = lim, stage = sldStage });
             // k185: профиль и при превышении времени (что успело набраться)
             if (Environment.GetEnvironmentVariable("P3D_SLDPROF") == "1") Console.Error.WriteLine("SLDPROF timeout " + name + "\n" + Parametric3D.Kernel.Diagnostics.Prof.Report());
+            if (cancelOn)
+            {
+                cts.Cancel();
+                bool stopped = false; try { stopped = t.Wait(TimeSpan.FromSeconds(60)); } catch (AggregateException) { stopped = true; }
+                Log(new { test = "sldprt-cancel", file = name, stopped });
+            }
             throw new Exception($"timeout {lim} s at {sldStage}");
         }
     }
