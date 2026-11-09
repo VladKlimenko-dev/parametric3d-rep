@@ -565,7 +565,6 @@ public sealed class Sketch : ModelItem
     /// <summary>Решение при перетаскивании: слабые размеры в формулах — по текущей геометрии.</summary>
     private bool _liveMeasure;
     public static readonly bool FormulaLiveOff = Environment.GetEnvironmentVariable("P3D_SKFORMULALIVE") == "0";
-    public static readonly bool LiveNoScopeOff = Environment.GetEnvironmentVariable("P3D_SKLIVENOSCOPE") == "0";
 
     /// <summary>
     /// k103 (замечание 2): ФОРМУЛА РАЗМЕРА В РЕШАТЕЛЕ. Формула ссылается на размеры этого же эскиза — значение размера
@@ -577,11 +576,6 @@ public sealed class Sketch : ModelItem
     public Func<double>? LiveFormula(SkDimension d)
     {
         if (FormulaLiveOff || string.IsNullOrWhiteSpace(d.Formula)) return null;
-        // k185 (шейка DLOT, замечание 09.11, 13:06): ТАБЛИЦА ЕЩЁ НЕ ИЗВЕСТНА (эскиз только что прочитан, формулы не пересчитаны
-        // с таблицей детали) — живой формулы нет: без таблицы нет единиц детали, и «d59» (= 2.313/2 дюйма) считалось как 1.1565 мм —
-        // три размера «= d59» сжимали эскиз в 25 раз, решение не сходилось, слабые размеры не пересобирались (d17 нельзя было
-        // удалить). Значение размера — сохранённое. Мутация P3D_SKLIVENOSCOPE=0.
-        if (FormulaScope == null && !LiveNoScopeOff) return null;
         if (!ExprParser.TryParse(d.Formula!, out Expr? e, out _) || e == null) return null;
         var refs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         e.CollectRefs(refs);
