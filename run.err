@@ -1,0 +1,2 @@
+exit 1
+seconds 166 nproc 4 env P3D_UVCHAIN=0 cmd sweepblend148e
