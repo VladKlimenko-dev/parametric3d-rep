@@ -2097,9 +2097,11 @@ public partial class MainWindow : Window
         // k96 (п. 17): удалить; нужный эскизу сильный размер становится слабым
         Add("Удалить размер", !d.UserLocked, () =>
         {
+            bool wasWeak = d.IsDefault && !d.Locked;
             var (removed, weakened) = SketchEditing.DeleteDimensions(sk, new[] { d }, solver);
             AfterSketchEdit(sk);
-            if (weakened > 0) ShowToast(L("Размер нужен, чтобы эскиз был определён, — он стал слабым"), error: false);
+            if (weakened > 0 && wasWeak) ShowToast(L("Серый размер {0} остаётся: без него у его точек есть степень свободы (эскиз не определён). Задайте свой размер, который их определяет (например, глубину или угол), — серый размер исчезнет сам.", d.Name), error: false);
+            else if (weakened > 0) ShowToast(L("Размер нужен, чтобы эскиз был определён, — он стал слабым"), error: false);
         }, "delete_but.svg");
         if (_dimMenuPick != null)
         {

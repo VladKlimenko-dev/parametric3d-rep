@@ -6602,6 +6602,35 @@ Check("UI-SKETCH-IMAGE-K184", () =>
     finally { foreach (var f in new[] { png, p3d }) if (File.Exists(f)) File.Delete(f); }
 });
 
+Check("UI-SKETCH-DIMEXT-K185", () =>
+{
+    // k185 (замечание 09.11, 12:39, пп. 1–2): размер между параллельными отрезками — размерная линия на обоих отрезках: выносных
+    // нет; выше обоих — выносные от верхних концов отрезков (не от середины и не до середины соседнего)
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    var l1 = sk.AddEntity(new SkLine(new SkPoint(0, -50), new SkPoint(0, 50)));
+    var l2 = sk.AddEntity(new SkLine(new SkPoint(20, -40), new SkPoint(20, 40)));
+    var dd = sk.AddDimension(DimensionType.DistanceLineLine, 20, l1, l2);
+    dd.UserPlaced = true;
+    sk.Dimensions.RemoveAll(x => !ReferenceEquals(x, dd));
+    string Ex() => string.Join("; ", SketchDimensions.LastExtensions.Select(e => $"({e.A.X:0.#},{e.A.Y:0.#})-({e.B.X:0.#},{e.B.Y:0.#})"));
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    Console.WriteLine($"  inside: text at ({dd.TextCenter.X:0.##},{dd.TextCenter.Y:0.##}), extensions {Ex()}");
+    Require(Math.Abs(dd.TextCenter.Y) < 35, "test setup: the dimension line is not between the segment ends");
+    Require(SketchDimensions.LastExtensions.Count == 0, "extension lines drawn though the dimension line lies on both segments");
+    dd.TextOffset += new Vector2d(0, 200);
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    var ex = SketchDimensions.LastExtensions.ToList();
+    Console.WriteLine($"  above: text at ({dd.TextCenter.X:0.##},{dd.TextCenter.Y:0.##}), extensions {Ex()}");
+    Require(dd.TextCenter.Y > 50, "test setup: the dimension line is not above the segments");
+    Require(ex.Count == 2 && ex.Any(e => (e.A - l1.B.P).Length < 1e-9) && ex.Any(e => (e.A - l2.B.P).Length < 1e-9), "extension lines do not start at the upper segment ends");
+    w.FinishSketch(); Run();
+});
+
 Check("UI-SKETCH-K106", () =>
 {
     // k106 (снимок 13:13): вершина открытого конца — поверх красного квадрата (2); совпадение концов дуг, уже касающихся,
