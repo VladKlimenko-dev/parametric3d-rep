@@ -1,0 +1,1 @@
+seconds 6 nproc 4 env P3D_SLDNAME=9271k53 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=2400 cmd sldprt
