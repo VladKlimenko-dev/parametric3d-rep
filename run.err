@@ -1,0 +1,103 @@
+SLDPROF timeout 6169K406_Quick-Hold External Grip Gear and Bearing Puller.SLDPRT
+  разметка грани: NurbsSurface       1475515.8 мс  ×62    4534.7 МБ
+  uv: триангуляция NurbsSurface       760124.1 мс  ×63
+  сетка: грань целиком                709080.2 мс  ×15    2935.8 МБ
+  сетка: способ 3                     342710.8 мс  ×7       6.1 МБ
+  сетка: способ 4                     342299.1 мс  ×7       6.8 МБ
+  разметка грани: ExtrudedSurface      10613.7 мс  ×101     425.3 МБ
+  uv: триангуляция ExtrudedSurface     10205.3 мс  ×101
+  сетка: уточнение                      9646.2 мс  ×30     727.6 МБ
+  XT: кривая INTERSECTION               7401.9 мс  ×184     133.8 МБ
+  сетка: самопроверка                   3281.8 мс  ×20     713.4 МБ
+  uv: самопроверка — точная площадь NurbsSurface    1957.4 мс  ×55     313.4 МБ
+  XT: поверхность BLENDED_EDGE          1834.4 мс  ×64     149.4 МБ
+  сетка: способ 2                       1734.9 мс  ×16      85.0 МБ
+  uv: контуры NurbsSurface              1699.1 мс  ×63
+  сетка: контур в параметры             1421.3 мс  ×22     347.9 МБ
+  uv: вырожденные NurbsSurface          1025.5 мс  ×63
+  XT: сплайн по точкам                   937.9 мс  ×232    6631.9 МБ
+  uv: внутренние точки NurbsSurface      683.8 мс  ×63
+  разметка грани: RevolvedSurface/Cone     347.0 мс  ×28      70.4 МБ
+  XT: кривая TRIMMED_CURVE               276.7 мс  ×24     442.6 МБ
+  разметка грани: PlaneSurface           245.9 мс  ×123      37.3 МБ
+  сетка: ориентация                      223.3 мс  ×31     198.2 МБ
+  разметка грани: RevolvedSurface/Torus     217.5 мс  ×39      76.2 МБ
+  uv: Делоне и доводка NurbsSurface      193.7 мс  ×63
+  uv: доводка NurbsSurface               158.8 мс  ×63
+  uv: доводка RevolvedSurface            155.5 мс  ×66
+  uv: самопроверка — точная площадь RevolvedSurface     152.2 мс  ×66      54.6 МБ
+  сетка: перекладка                      113.9 мс  ×31      38.8 МБ
+  XT: кривая B_CURVE                      84.7 мс  ×8     432.6 МБ
+  uv: Делоне и доводка ExtrudedSurface      78.8 мс  ×101
+  uv: доводка ExtrudedSurface             56.9 мс  ×101
+  uv: контуры ExtrudedSurface             55.8 мс  ×101
+  uv: Делоне после точек NurbsSurface      51.5 мс  ×63
+  uv: Делоне и доводка RevolvedSurface      45.4 мс  ×66
+  разметка грани: RevolvedSurface/Sphere      39.5 мс  ×4       2.1 МБ
+  XT: поверхность B_SURFACE               36.5 мс  ×18      15.9 МБ
+  uv: вырожденные ExtrudedSurface         36.4 мс  ×101
+  uv: Делоне после точек ExtrudedSurface      27.1 мс  ×101
+  uv: самопроверка — точная площадь ExtrudedSurface      24.8 мс  ×101      24.3 МБ
+  uv: внутренние точки ExtrudedSurface      22.7 мс  ×101
+  uv: самопроверка — точная площадь PlaneSurface      22.3 мс  ×123      22.9 МБ
+  uv: триангуляция RevolvedSurface        21.8 мс  ×66
+  uv: вырожденные RevolvedSurface         19.7 мс  ×66
+  XT: поверхность CONE                    18.9 мс  ×28       0.1 МБ
+  uv: контуры RevolvedSurface             18.3 мс  ×66
+  uv: самопроверка — точная площадь StereoChart      12.8 мс  ×4       0.8 МБ
+  uv: внутренние точки RevolvedSurface      12.6 мс  ×66
+  сетка: конформная плоскость             11.7 мс  ×7       5.4 МБ
+  сетка: способ 0                          9.3 мс  ×16       1.0 МБ
+  uv: Делоне и доводка PlaneSurface        8.9 мс  ×123
+  uv: триангуляция PlaneSurface            8.2 мс  ×123
+  сетка: способ 1                          8.2 мс  ×16       1.0 МБ
+  uv: контуры PlaneSurface                 7.1 мс  ×123
+  XT: кривая допусковая                    4.9 мс  ×16       2.5 МБ
+  uv: Делоне после точек RevolvedSurface       2.6 мс  ×66
+  uv: вырожденные PlaneSurface             2.2 мс  ×123
+  XT: поверхность CYLINDER                 0.9 мс  ×119       0.2 МБ
+  uv: доводка StereoChart                  0.5 мс  ×4
+  XT: поверхность PLANE                    0.4 мс  ×125       0.2 МБ
+  uv: контуры StereoChart                  0.4 мс  ×4
+  uv: Делоне и доводка StereoChart         0.3 мс  ×4
+  uv: внутренние точки StereoChart         0.2 мс  ×4
+  XT: поверхность TORUS                    0.2 мс  ×48       0.1 МБ
+  uv: вырожденные StereoChart              0.2 мс  ×4
+  uv: Делоне после точек StereoChart       0.1 мс  ×4
+  uv: триангуляция StereoChart             0.1 мс  ×4
+  XT: поверхность SPHERE                   0.0 мс  ×8       0.0 МБ
+  XT: кривая CIRCLE                        0.0 мс  ×377       0.0 МБ
+  XT: кривая LINE                          0.0 мс  ×264       0.0 МБ
+  XT: кривая ELLIPSE                       0.0 мс  ×36       0.0 МБ
+  # XT: проекция на B — полная             75,000
+  # XT: проекция на B — полная (первая)           18
+  # XT: проекция на B — тёплая             71,939
+  # XT: проекция на B — тёплая (спуск)       75,909
+  # XT: сгущение — не сошлось               1,647
+  # XT: сгущение — сошлось                  7,323
+  # XT: сгущение BlendBound×Cone точек           16
+  # XT: сгущение BlendBound×Cyl точек           16
+  # XT: сгущение BlendBound×Pl точек           44
+  # XT: сгущение BlendBound×Tor точек           16
+  # XT: сгущение BlendBound×XtBlendSurf точек           26
+  # XT: сгущение BlendBound×XtNurbsSurf точек           18
+  # XT: сгущение Cone×BlendBound точек            8
+  # XT: сгущение Cone×Pl точек                 84
+  # XT: сгущение Cone×XtNurbsSurf точек          222
+  # XT: сгущение Cyl×BlendBound точек           40
+  # XT: сгущение Cyl×Cyl точек                 64
+  # XT: сгущение Cyl×XtNurbsSurf точек          640
+  # XT: сгущение Pl×BlendBound точек           34
+  # XT: сгущение Pl×Cone точек                136
+  # XT: сгущение Pl×XtNurbsSurf точек           74
+  # XT: сгущение Tor×BlendBound точек           12
+  # XT: сгущение Tor×Cyl точек                 32
+  # XT: сгущение XtBlendSurf×BlendBound точек           10
+  # XT: сгущение XtBlendSurf×Cyl точек           28
+  # XT: сгущение XtBlendSurf×XtBlendSurf точек           24
+  # XT: сгущение XtNurbsSurf×BlendBound точек           12
+  # XT: сгущение XtNurbsSurf×Cone точек           68
+  # XT: центр шара — Ньютон                21,384
+  # XT: центр шара — попеременно            1,377
+exit 1
+seconds 1502 nproc 4 env P3D_SLDNAME=6169K406 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500 cmd sldprt corpus
