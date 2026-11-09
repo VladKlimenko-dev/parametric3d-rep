@@ -1022,7 +1022,8 @@ public sealed class NurbsSurface : ISurface3
         }
         return res;
     }
-    public static readonly bool UvChainOff = Environment.GetEnvironmentVariable("P3D_UVCHAIN") == "0";
+    // ВЫКЛЮЧЕНО ПО УМОЛЧАНИЮ (P3D_UVCHAIN=1 — включить): у 8729N12 ломало сетку, сверлу не помогло
+    public static readonly bool UvChainOff = Environment.GetEnvironmentVariable("P3D_UVCHAIN") != "1";
 
     /// <summary>Контуры грани в параметрах поверхности.</summary>
     private List<List<Vector2d>> FaceLoopsUV(TFace face)
