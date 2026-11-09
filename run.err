@@ -1,0 +1,1 @@
+seconds 3 nproc 4 env  cmd sldprt tests/k01/data/sw_ujoint_60075k97.SLDPRT
