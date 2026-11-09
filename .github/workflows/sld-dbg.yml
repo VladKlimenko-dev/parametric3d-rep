@@ -66,6 +66,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { name: k185_d9, cmd: 'sldprt tests/k01/data/sw_ujoint_60075k97.SLDPRT', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
