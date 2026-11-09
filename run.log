@@ -1,0 +1,7 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["sldprt","corpus"]}
+{"test":"sldprt","file":"6169K417_Quick-Hold External Grip Gear and Bearing Puller.SLDPRT","timeout":1500,"stage":"read STEP (convert 1113 ms, 10375 KB)"}
+{"test":"SLDPRT-IMPORT-K182 6169K417_Quick-Hold External Grip Gear and Bearing Puller.SLDPRT","ok":false,"error":"timeout 1500 s at read STEP (convert 1113 ms, 10375 KB)"}
+{"test":"sldprt-summary","files":1,"good":0,"seconds":1500}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":0,"failed":1}
