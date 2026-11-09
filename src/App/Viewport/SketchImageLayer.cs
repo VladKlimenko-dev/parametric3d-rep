@@ -32,6 +32,9 @@ public sealed class SketchImageLayer : Control, ICustomHitTest
     public event Action? Dragging;
 
     public const double HandlePx = 8, RotateOffsetPx = 26;
+    /// <summary>k185: прилипание поворота к прямым углам (градусы); P3D_SKIMGSNAP=0 — без прилипания.</summary>
+    public const double RightSnapDeg = 5;
+    static readonly bool RightSnapOff = Environment.GetEnvironmentVariable("P3D_SKIMGSNAP") == "0";
 
     public SketchImageLayer(ModelViewport view)
     {
@@ -226,6 +229,8 @@ public sealed class SketchImageLayer : Control, ICustomHitTest
                 double a0 = Math.Atan2(start.Y - o.Center.Y, start.X - o.Center.X), a1 = Math.Atan2(cur.Y - o.Center.Y, cur.X - o.Center.X);
                 double a = o.Angle + (a1 - a0) * 180 / Math.PI;
                 if (snap) a = Math.Round(a / 15) * 15;
+                // k185 (замечание 09.11, 15:15, п. 2): прилипание к 0°, 90°, 180°, 270° в пределах 5°
+                else if (!RightSnapOff) { double m = Math.Round(a / 90) * 90; if (Math.Abs(a - m) <= RightSnapDeg) a = m; }
                 a %= 360; if (a > 180) a -= 360; if (a <= -180) a += 360;
                 im.Angle = a;
                 break;
@@ -239,8 +244,15 @@ public sealed class SketchImageLayer : Control, ICustomHitTest
     public override void Render(DrawingContext ctx)
     {
         LastDrawn = 0;
-        if (Sk is not { } sk || sk.Images.Count == 0) return;
-        if (Selected != null && !sk.Images.Contains(Selected)) { Selected = null; SelectionChanged?.Invoke(); }
+        if (Sk is not { } sk || sk.Images.Count == 0)
+        {
+            if (Selected != null) Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (Selected != null && (_view.ActiveSketch is not { } s0 || !s0.Images.Contains(Selected))) Select(null); });
+            return;
+        }
+        // k185: выбор, которого нет в эскизе (отмена, удаление), снимается ПОСЛЕ кадра: смена панели свойств во время отрисовки
+        // давала «Visual was invalidated during rendering pass», и окно переставало обновляться
+        bool stale = Selected != null && !sk.Images.Contains(Selected);
+        if (stale) Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (Selected != null && _view.ActiveSketch is { } s2 && !s2.Images.Contains(Selected)) Select(null); });
         foreach (var im in sk.Images)
         {
             if (Scr(sk, im.At(-1, 1)) is not { } tl || Scr(sk, im.At(1, 1)) is not { } tr || Scr(sk, im.At(-1, -1)) is not { } bl) continue;
@@ -263,7 +275,7 @@ public sealed class SketchImageLayer : Control, ICustomHitTest
             }
             LastDrawn++;
         }
-        if (Selected == null) return;
+        if (Selected == null || stale) return;
         var hs = Handles(out var rot);
         var fill = new SolidColorBrush(Colors.White); var pen = new Pen(new SolidColorBrush(Color.FromRgb(255, 140, 0)), 1.5);
         foreach (var (_, _, q) in hs) ctx.DrawRectangle(fill, pen, new Rect(q.X - HandlePx / 2, q.Y - HandlePx / 2, HandlePx, HandlePx));
