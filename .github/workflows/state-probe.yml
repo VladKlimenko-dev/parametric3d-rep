@@ -53,8 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185o_two, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=1939K119;6450K1_ P3D_SLDDIAG=1' }
-          - { name: k185o_allA, cmd: 'allA', env: '' }
+          - { name: k185o_two, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=1939K119,6450K1_ P3D_SLDDIAG=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
