@@ -109,9 +109,22 @@ internal abstract class XtSurf
         readonly XtBlendSurf B; readonly int Idx;
         public BlendBound(XtBlendSurf b, int idx) { B = b; Idx = idx; }
         public override Vector3d At(double u, double v) => B.At(u, Idx == 0 ? 0 : 1);
-        public override Vector3d Project(Vector3d q) { var c = B.CentreAt(q); return (Idx == 0 ? B.S0 : B.S1).Project(c); }
+        // k185 (сверло 2958A552, шайба 92146A038): НОМЕР ОПОРЫ ГРАНИЦЫ — ПО БЛИЖАЙШЕМУ КАСАНИЮ. У части скруглений номер границы
+        // в файле не совпадал с порядком опор: точка ребра лежала на сфере шара (на R от центра), а «касание» бралось с другой
+        // опорой — отход R·√2 (0.449 мм при R 0.3175: шайба рвалась) или 0.05 мм у R 0.0254 (канавка сверла). Точка у края
+        // скругления лежит на своём касании (отход ~0), чужое — от неё на R√2 и больше. Мутация P3D_XTBOUNDNEAR=0.
+        public override Vector3d Project(Vector3d q) { var (mine, _) = Contacts(q); return mine; }
         /// <summary>Касание с другой опорой (см. сгущение кривой пересечения).</summary>
-        public Vector3d ProjectOther(Vector3d q) { var c = B.CentreAt(q); return (Idx == 0 ? B.S1 : B.S0).Project(c); }
+        public Vector3d ProjectOther(Vector3d q) { var (_, other) = Contacts(q); return other; }
+        (Vector3d Mine, Vector3d Other) Contacts(Vector3d q)
+        {
+            var c = B.CentreAt(q);
+            var p0 = B.S0.Project(c); var p1 = B.S1.Project(c);
+            bool first = Idx == 0;
+            if (!BoundNearOff) first = (p0 - q).LengthSquared <= (p1 - q).LengthSquared;
+            return first ? (p0, p1) : (p1, p0);
+        }
+        static readonly bool BoundNearOff = Environment.GetEnvironmentVariable("P3D_XTBOUNDNEAR") == "0";
         /// <summary>k185: разбор — центр у точки, его отстояние от опор против радиусов, отход касания.</summary>
         public string Diag(Vector3d q)
         {
