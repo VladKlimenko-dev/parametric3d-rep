@@ -740,6 +740,44 @@ internal static class XtPoly
         return res;
     }
 
+    /// <summary>k185: ломаная замкнута (последняя точка — в первой с точностью до сотой доли среднего шага).</summary>
+    public static bool IsRing(IReadOnlyList<Vector3d> pts)
+    {
+        if (pts.Count < 4) return false;
+        double len = 0; for (int i = 1; i < pts.Count; i++) len += (pts[i] - pts[i - 1]).Length;
+        return (pts[0] - pts[^1]).Length <= Math.Max(1e-9, 1e-2 * len / (pts.Count - 1));
+    }
+
+    /// <summary>k185: участок кольца от s до e по ходу кольца (forward) или против; концы — точно s и e.</summary>
+    public static List<Vector3d> TrimRing(IReadOnlyList<Vector3d> pts0, Vector3d s, Vector3d e, bool forward)
+    {
+        var ring = pts0.ToList(); ring.RemoveAt(ring.Count - 1);   // без повтора первой точки
+        if (!forward) ring.Reverse();
+        int n = ring.Count;
+        (int I, double T) Near(Vector3d q)
+        {
+            int bi = 0; double bt = 0, bd = double.MaxValue;
+            for (int i = 0; i < n; i++)
+            {
+                var a = ring[i]; var ab = ring[(i + 1) % n] - a; double l2 = ab.LengthSquared;
+                double t = l2 > 0 ? Math.Clamp(Vector3d.Dot(q - a, ab) / l2, 0, 1) : 0;
+                double d = (a + ab * t - q).LengthSquared;
+                if (d < bd) { bd = d; bi = i; bt = t; }
+            }
+            return (bi, bt);
+        }
+        var ns = Near(s); var ne = Near(e);
+        var res = new List<Vector3d> { s };
+        // от звена ns до звена ne по ходу: точки ns.I+1 … ne.I (через стык)
+        int steps = (ne.I - ns.I + n) % n;
+        if (steps == 0 && ne.T < ns.T) steps = n;   // конец позади начала на том же звене — почти полный оборот
+        for (int k = 1; k <= steps; k++) res.Add(ring[(ns.I + k) % n]);
+        res.Add(e);
+        var clean = new List<Vector3d>();
+        foreach (var p in res) if (clean.Count == 0 || (clean[^1] - p).Length > 1e-12) clean.Add(p);
+        return clean;
+    }
+
     /// <summary>Участок ломаной между ближайшими к s и e точками (по ходу ломаной), концы — точно s и e.</summary>
     static readonly bool TrimRingOff = Environment.GetEnvironmentVariable("P3D_XTTRIMRING") == "0";
     public static List<Vector3d> Trim(IReadOnlyList<Vector3d> pts, Vector3d s, Vector3d e)

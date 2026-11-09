@@ -338,7 +338,12 @@ public static class XtToStep
             {
                 bool closed = pS == null || pE == null || (pS.Value - pE.Value).Length < 1e-12;
                 List<Vector3d> pts;
-                if (!closed) { pts = XtPoly.Trim(free, pS!.Value, pE!.Value); sense = true; }
+                // k185: ОТКРЫТОЕ РЕБРО НА ЗАМКНУТОЙ КРИВОЙ (карта пересечения — кольцо): участок от начала до конца ребра — по ходу
+                // кривой (против хода при sense '-'), через стык кольца, а не по возрастанию номеров точек карты: прежде ребро
+                // шло дополнительной дугой (300° вместо 60°), контуры плоских граней пересекали себя, сетка рвалась (тепловое
+                // реле 7254K613). Мутация P3D_XTRINGDIR=0.
+                if (!closed && !RingDirOff && XtPoly.IsRing(free)) { pts = XtPoly.TrimRing(free, pS!.Value, pE!.Value, cn == null || cn.C("sense") != '-'); sense = true; }
+                else if (!closed) { pts = XtPoly.Trim(free, pS!.Value, pE!.Value); sense = true; }
                 else
                 {
                     pts = free; sense = cn == null || cn.C("sense") != '-';
@@ -533,6 +538,7 @@ public static class XtToStep
         }
         static readonly bool IntDbg = Environment.GetEnvironmentVariable("P3D_XTINTDBG") == "1";
         static readonly bool PolyMode = Environment.GetEnvironmentVariable("P3D_XTPOLY") == "1";
+        static readonly bool RingDirOff = Environment.GetEnvironmentVariable("P3D_XTRINGDIR") == "0";
         static readonly bool InterpCleanOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCLEAN") == "0";
         static readonly bool InterpCheckOff = Environment.GetEnvironmentVariable("P3D_XTINTERPCHECK") == "0";
         static readonly bool ConeFlipOff = Environment.GetEnvironmentVariable("P3D_XTCONEFLIP") != "1";   // естественная нормаль конуса XT (P + vA + …) — наружу, как у STEP
