@@ -108,7 +108,11 @@ public partial class MainWindow
             CloseDimensionEdit();
             View.Selection.Clear();
             var u0 = sk.Plane.U;
+            // k185 (замечание 09.11, 15:15, п. 1): выбранное изображение — по номеру в эскизе: восстановление ставит копии, и
+            // прежний объект выбора (с рамкой и ручками) оставался на старом месте
+            int imSel = ImageLayer?.Selected is { } ims ? sk.Images.IndexOf(ims) : -1;
             st.RestoreInto(sk);
+            if (ImageLayer != null) ImageLayer.Select(imSel >= 0 && imSel < sk.Images.Count ? sk.Images[imSel] : null);
             if ((sk.Plane.U - u0).Length > 1e-9) View.AlignToActiveSketch();   // k123: отменён поворот эскиза — и вид
             _skLast = SketchState.Capture(sk);      // снимок из стека теперь «живой» — у отметки своя копия
             _skLastSig = SketchSig(sk);

@@ -6604,6 +6604,50 @@ Check("UI-SKETCH-IMAGE-K184", () =>
     finally { foreach (var f in new[] { png, p3d }) if (File.Exists(f)) File.Delete(f); }
 });
 
+Check("UI-SKETCH-IMAGE-UNDO-K185", () =>
+{
+    // k185 (замечание 09.11, 15:15): (1) отмена изменения размера картинки — выбор (рамка, ручки) на восстановленной картинке,
+    // отрисовка без исключения; (2) поворот прилипает к 0/90/180/270° в пределах 5°
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    string png = Path.Combine(Path.GetTempPath(), $"uicheck_img2_{Guid.NewGuid():N}.png");
+    var wb = new Avalonia.Media.Imaging.WriteableBitmap(new Avalonia.PixelSize(40, 20), new Avalonia.Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+    using (var fb = wb.Lock()) { var px = new int[40 * 20]; Array.Fill(px, unchecked((int)0xFF3366CC)); System.Runtime.InteropServices.Marshal.Copy(px, 0, fb.Address, px.Length); }
+    wb.Save(png);
+    try
+    {
+        var im = w.InsertSketchImage(sk, png); Run();
+        double w0 = im.Width;
+        var o = im.Copy();
+        SketchImageLayer.Apply(im, o, 2, 1, 0, o.At(1, 0), o.At(1, 0) + new Vector2d(5, 0), false);
+        w.SketchCheckpoint(); Run();
+        Require(Math.Abs(im.Width - (w0 + 5)) < 1e-9, "resize");
+        w.SketchUndo(); Run();
+        var sel = w.ImageLayer.Selected;
+        Console.WriteLine($"  undo: images {sk.Images.Count}, width {sk.Images[0].Width:0.###} (was {w0:0.###}), selected in sketch {sel != null && sk.Images.Contains(sel)}, handles {w.ImageLayer.Handles(out _).Count}");
+        Require(Math.Abs(sk.Images[0].Width - w0) < 1e-9, "undo did not restore the size");
+        Require(sel != null && sk.Images.Contains(sel), "the selection stays on the old image object after undo");
+        Require((w.ImageLayer.Handles(out _)[0].P - vp.Project(sk.Plane.ToWorld(sel!.At(-1, -1)))!.Value).Length < 1e-6, "handles are not at the restored image");
+        w.ImageLayer.InvalidateVisual(); Run();
+        // (2) поворот: 87° → 90°, 80° — как есть, 183° → 180°
+        foreach (var (deg, want) in new[] { (87.0, 90.0), (80.0, 80.0), (183.0, 180.0), (-92.0, -90.0) })
+        {
+            var cur = sk.Images[0]; var o2 = cur.Copy(); o2.Angle = 0; cur.Angle = 0;
+            double r = deg * Math.PI / 180;
+            SketchImageLayer.Apply(cur, o2, 3, 0, 0, o2.Center + new Vector2d(10, 0), o2.Center + new Vector2d(10 * Math.Cos(r), 10 * Math.Sin(r)), false);
+            Console.WriteLine($"  rotate {deg}° -> {cur.Angle:0.###}°");
+            Require(Math.Abs(cur.Angle - want) < 1e-6, $"rotation {deg}° gave {cur.Angle}°, expected {want}°");
+        }
+        w.FinishSketch(); Run();
+        w.Close();
+    }
+    finally { if (File.Exists(png)) File.Delete(png); }
+});
+
 Check("UI-SKETCH-DIMEXT-K185", () =>
 {
     // k185 (замечание 09.11, 12:39, пп. 1–2): размер между параллельными отрезками — размерная линия на обоих отрезках: выносных
