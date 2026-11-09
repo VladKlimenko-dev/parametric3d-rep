@@ -1,0 +1,2 @@
+exit 1
+seconds 2303 nproc 4 env  cmd allA
