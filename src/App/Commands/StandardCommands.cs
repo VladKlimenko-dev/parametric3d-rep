@@ -287,6 +287,8 @@ public static class StandardCommands
         SkCmd("sk.text", "Текст", "sk_text_but.svg", () => SketchEditCommands.Text(w), "text текст надпись");
         // k184: изображение-подложка в эскиз (png, jpg, bmp)
         SkCmd("sk.image", "Импорт изображения", "sk_image_but.svg", () => _ = w.ImportSketchImageAsync(), "import image picture png jpg bmp изображение картинка подложка");
+        // k185: изображение из буфера обмена (то же — Ctrl+V в эскизе)
+        SkCmd("sk.image_paste", "Вставить изображение из буфера", "paste_but.svg", () => _ = w.PasteSketchImageAsync(), "paste image clipboard screenshot вставить изображение буфер обмена скриншот картинка");
         SkCmd("sk.fillet", "Скругление угла", "sk_fillet_but.svg", () => SketchEditCommands.Corner(w, false), "sketch fillet скругление угла");
         SkCmd("sk.chamfer", "Фаска угла", "sk_chamfer_but.svg", () => SketchEditCommands.Corner(w, true), "sketch chamfer фаска угла");
         SkCmd("sk.mirror", "Зеркало относительно осевой", "sk_mirror_but.svg", () => SketchEditCommands.Mirror(w), "sketch mirror зеркало осевая");

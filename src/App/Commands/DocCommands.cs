@@ -110,7 +110,8 @@ public static class DocCommands
         r.Add(new AppCommand { Id = "edit.copy", Label = "Копировать", Group = E, Icon = "copy_but.svg", Synonyms = "copy копировать", Gesture = K(Key.C, KeyModifiers.Control),
             CanRun = () => HasPart() && w.SelectedItems().Any(x => x is Feature or Sketch), Run = () => Copy(w) });
         r.Add(new AppCommand { Id = "edit.paste", Label = "Вставить", Group = E, Icon = "paste_but.svg", Synonyms = "paste вставить", Gesture = K(Key.V, KeyModifiers.Control),
-            CanRun = () => HasPart() && _clip.Count > 0, Run = () => Paste(w) });
+            // k185 (замечание 09.11, 12:02, п. 2): в эскизе Ctrl+V — изображение из буфера обмена
+            CanRun = () => w.InSketch || HasPart() && _clip.Count > 0, Run = () => { if (w.InSketch) _ = w.PasteSketchImageAsync(); else Paste(w); } });
         r.Add(new AppCommand { Id = "edit.rename", Label = "Переименовать", Group = E, Icon = "rename_but.svg", Synonyms = "rename переименовать имя", Gesture = K(Key.F2),
             CanRun = () => w.SelectedItems().Count == 1, Run = async () => await Rename(w) });
         r.Add(new AppCommand { Id = "app.settings", Label = "Настройки", Group = A, Icon = "settings_but.svg", Synonyms = "settings preferences options настройки", Run = async () => await Settings(w) });

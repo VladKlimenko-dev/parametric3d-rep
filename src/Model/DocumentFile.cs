@@ -351,7 +351,7 @@ public static class DocumentFile
             dto.Images = s.Images.Select(im => new ImageDto
             {
                 File = im.FileName, Px = im.PixelWidth, Py = im.PixelHeight, Data = Convert.ToBase64String(im.Data),
-                Cx = im.Center.X, Cy = im.Center.Y, W = im.Width, H = im.Height, Angle = im.Angle, Opacity = im.Opacity,
+                Cx = im.Center.X, Cy = im.Center.Y, W = im.Width, H = im.Height, Angle = im.Angle, Opacity = im.Opacity, Inv = im.Invert ? true : null,
             }).ToList();
 
         foreach (var c in s.Constraints)
@@ -1112,7 +1112,7 @@ public static class DocumentFile
                         s.Images.Add(new SkImage
                         {
                             FileName = idt.File ?? "", PixelWidth = idt.Px, PixelHeight = idt.Py, Data = Convert.FromBase64String(idt.Data ?? ""),
-                            Center = new OpenTK.Mathematics.Vector2d(idt.Cx, idt.Cy), Width = idt.W, Height = idt.H, Angle = idt.Angle, Opacity = idt.Opacity > 0 ? idt.Opacity : 0.75,
+                            Center = new OpenTK.Mathematics.Vector2d(idt.Cx, idt.Cy), Width = idt.W, Height = idt.H, Angle = idt.Angle, Opacity = idt.Opacity > 0 ? idt.Opacity : 0.75, Invert = idt.Inv == true,
                         });
                     }
                     catch (FormatException) { lost.Add($"sketch '{sd.Name}': image '{idt.File}' is damaged"); }
@@ -2091,6 +2091,7 @@ public static class DocumentFile
         public double H { get; set; }
         public double Angle { get; set; }
         public double Opacity { get; set; }
+        public bool? Inv { get; set; }
     }
 
     private sealed class GearDto

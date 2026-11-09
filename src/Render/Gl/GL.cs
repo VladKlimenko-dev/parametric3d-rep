@@ -233,6 +233,17 @@ public static unsafe class GL
         if (data == null) _texImage2D(0x0DE1, 0, 0x8058, w, h, 0, 0x1908, 0x1401, null);
         else fixed (byte* p = data) _texImage2D(0x0DE1, 0, 0x8058, w, h, 0, 0x1908, 0x1401, p);
     }
+    /// <summary>k185: текстура RGBA8 с линейной фильтрацией (изображение эскиза: сглаживание при масштабе).</summary>
+    public static void TexImageRgba8Linear(int w, int h, byte[] data)
+    {
+        Guard((long)w * h * 4, data.LongLength, "glTexImage2D");
+        _pixelStorei(0x0CF5, 1);
+        _texParameteri(0x0DE1, 0x2801, 0x2601);   // MIN_FILTER = LINEAR
+        _texParameteri(0x0DE1, 0x2800, 0x2601);   // MAG_FILTER = LINEAR
+        _texParameteri(0x0DE1, 0x2802, 0x812F);
+        _texParameteri(0x0DE1, 0x2803, 0x812F);
+        fixed (byte* p = data) _texImage2D(0x0DE1, 0, 0x8058, w, h, 0, 0x1908, 0x1401, p);
+    }
     public static void TexSubImageRgba8(int x, int y, int w, int h, byte[] data, int offset)
     {
         Guard((long)w * h * 4, data.LongLength - offset, "glTexSubImage2D");

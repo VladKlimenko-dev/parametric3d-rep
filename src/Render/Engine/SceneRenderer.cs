@@ -29,7 +29,7 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     public bool SketchMode;
 
-    private ShaderProgram? _mesh, _line, _point, _fill, _bg, _floor;
+    private ShaderProgram? _mesh, _line, _point, _fill, _bg, _floor, _image;
     /// <summary>k132: габарит тел сцены (мир), без предпросмотра; пусто — нет тел.</summary>
     private Vector3 _bMin, _bMax; private bool _hasBounds;
     /// <summary>Разбор (k132): пол последнего кадра — нарисован, его высота, центр и полуразмеры; проходы отражения и тени.</summary>
@@ -140,6 +140,7 @@ public sealed class SceneRenderer : IDisposable
         _bg = new ShaderProgram("background", EngineShaders.BackgroundVert, EngineShaders.BackgroundFrag);
         _cap = new ShaderProgram("cap", EngineShaders.CapVert, EngineShaders.CapFrag);
         _floor = new ShaderProgram("floor", EngineShaders.FloorVert, EngineShaders.FloorFrag);
+        _image = new ShaderProgram("image", EngineShaders.ImageVert, EngineShaders.ImageFrag);
         _emptyVao = GL.GenVertexArray();
     }
 
@@ -266,6 +267,69 @@ public sealed class SceneRenderer : IDisposable
         UploadLines(_ovGrid, grid);
         UploadLines(_ovLines, lines);
         UploadPoints(_ovPoints, points);
+    }
+
+    /// <summary>
+    /// k185 (замечание 09.11, 12:02, п. 3): ИЗОБРАЖЕНИЕ ЭСКИЗА — в кадре вида: над сеткой и плоскостями, но под
+    /// заливкой, линиями, точками эскиза (и под размерами и значками связей — те рисуются поверх вида). Пиксели — RGBA8
+    /// premultiplied, строки сверху вниз; O — левый нижний угол в мире, U, V — полные стороны (ширина, высота).
+    /// </summary>
+    public sealed class OverlayImage
+    {
+        public object Key = null!;
+        public byte[] Rgba = Array.Empty<byte>();
+        public int W, H;
+        public Vector3 O, U, V;
+        public float Opacity = 1;
+        public bool Invert;
+    }
+
+    private readonly Dictionary<object, int> _imgTex = new(ReferenceEqualityComparer.Instance);
+    private List<OverlayImage>? _ovImages;
+    /// <summary>Разбор: изображений эскиза в последнем кадре.</summary>
+    public int ImagesDrawn { get; private set; }
+
+    /// <summary>Изображения эскиза для следующих кадров (null — нет); текстуры по ключу, лишние удаляются.</summary>
+    public void SetOverlayImages(List<OverlayImage>? list)
+    {
+        _ovImages = list is { Count: > 0 } ? list : null;
+        if (_imgTex.Count == 0) return;
+        foreach (var k in _imgTex.Keys.ToList())
+            if (_ovImages == null || !_ovImages.Any(x => ReferenceEquals(x.Key, k))) { GL.DeleteTexture(_imgTex[k]); _imgTex.Remove(k); }
+    }
+
+    private void DrawImages(FrameParams f)
+    {
+        ImagesDrawn = 0;
+        if (_ovImages == null || _image == null) return;
+        GL.Disable(EnableCap.DepthTest); GL.DepthMask(false);
+        GL.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
+        _image.Use();
+        _image.Set("uView", f.View); _image.Set("uProj", f.Proj);
+        _image.Set("uTex", 1);
+        GL.ActiveTexture(1);
+        GL.BindVertexArray(_emptyVao);
+        foreach (var im in _ovImages)
+        {
+            if (im.W <= 0 || im.H <= 0 || im.Rgba.LongLength < (long)im.W * im.H * 4) continue;
+            if (!_imgTex.TryGetValue(im.Key, out int tex))
+            {
+                tex = GL.GenTexture();
+                GL.BindTexture2D(tex);
+                GL.TexImageRgba8Linear(im.W, im.H, im.Rgba);
+                _imgTex[im.Key] = tex;
+            }
+            else GL.BindTexture2D(tex);
+            _image.Set("uO", im.O); _image.Set("uU", im.U); _image.Set("uV", im.V);
+            _image.Set("uOpacity", Math.Clamp(im.Opacity, 0.05f, 1f));
+            _image.Set("uInvert", im.Invert ? 1 : 0);
+            GL.DrawArrays(PrimitiveType.Triangles, 0, 6);
+            ImagesDrawn++;
+        }
+        GL.BindTexture2D(0);
+        GL.ActiveTexture(0);
+        GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        GL.DepthMask(true); GL.Enable(EnableCap.DepthTest);
     }
 
     /// <summary>k179: заливка эскиза — треугольники в мире (null — нет); те же данные — без новой загрузки.</summary>
@@ -475,6 +539,9 @@ public sealed class SceneRenderer : IDisposable
 
         // опорные плоскости — прозрачные, после тел
         DrawPlanes(f, pick: false);
+
+        // k185: изображения эскиза — под заливкой, линиями и точками эскиза
+        if (SketchMode) DrawImages(f); else ImagesDrawn = 0;
 
         // k179: заливка эскиза — под его линиями (линии эскиза рисуются поверх, без глубины)
         if (_ovFillN > 0 && _ovFillVao >= 0 && SketchMode)
@@ -1188,6 +1255,9 @@ public sealed class SceneRenderer : IDisposable
             ReleaseTargets();
             if (_flagsTex >= 0) GL.DeleteTexture(_flagsTex);
             _flagsTex = -1;
+            foreach (var t in _imgTex.Values) GL.DeleteTexture(t);
+            _imgTex.Clear(); _ovImages = null;
+            _image?.Dispose(); _image = null;
             foreach (var p in new[] { _mesh, _line, _point, _fill, _bg }) p?.Dispose();
             _mesh = _line = _point = _fill = _bg = null;
             if (_emptyVao >= 0) GL.DeleteVertexArray(_emptyVao);

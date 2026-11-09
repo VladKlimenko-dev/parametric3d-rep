@@ -46,18 +46,52 @@ public partial class MainWindow
     }
 
     /// <summary>Вставка изображения из файла в эскиз (выбирается; шаг отмены эскиза).</summary>
-    public SkImage InsertSketchImage(Sketch sk, string path)
+    public SkImage InsertSketchImage(Sketch sk, string path) => InsertSketchImageData(sk, Path.GetFileName(path), File.ReadAllBytes(path));
+
+    /// <summary>Вставка изображения из байтов файла (png, jpg, bmp) в эскиз.</summary>
+    public SkImage InsertSketchImageData(Sketch sk, string name, byte[] data)
     {
-        var data = File.ReadAllBytes(path);
         Avalonia.Media.Imaging.Bitmap bmp;
         using (var ms = new MemoryStream(data)) bmp = new Avalonia.Media.Imaging.Bitmap(ms);
-        var im = SkImage.Create(Path.GetFileName(path), data, bmp.PixelSize.Width, bmp.PixelSize.Height);
+        var im = SkImage.Create(name, data, bmp.PixelSize.Width, bmp.PixelSize.Height);
         bmp.Dispose();
         sk.Images.Add(im);
         SketchCheckpoint();
         View.InvalidateOverlay();
         ImageLayer.Select(im);
         return im;
+    }
+
+    /// <summary>
+    /// k185 (замечание 09.11, 12:02, п. 2): ВСТАВКА ИЗОБРАЖЕНИЯ ИЗ БУФЕРА ОБМЕНА (Ctrl+V в эскизе, команда «Вставить
+    /// изображение»): картинка (скриншот, копия из браузера) — сохраняется как PNG; скопированный файл изображения — как есть.
+    /// </summary>
+    public async Task PasteSketchImageAsync()
+    {
+        if (View.ActiveSketch is not { } sk) { ShowToast(L("Изображение вставляется в эскиз — откройте эскиз")); return; }
+        try
+        {
+            if (Clipboard is not { } cb) { ShowToast(L("Буфер обмена недоступен")); return; }
+            using (var bmp = await Avalonia.Input.Platform.ClipboardExtensions.TryGetBitmapAsync(cb))
+            {
+                if (bmp != null && bmp.PixelSize.Width > 0 && bmp.PixelSize.Height > 0)
+                {
+                    using var ms = new MemoryStream();
+                    bmp.Save(ms);
+                    InsertSketchImageData(sk, L("Буфер обмена") + ".png", ms.ToArray());
+                    return;
+                }
+            }
+            var file = await Avalonia.Input.Platform.ClipboardExtensions.TryGetFileAsync(cb);
+            if (file?.TryGetLocalPath() is { } path && File.Exists(path)
+                && Path.GetExtension(path).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".bmp")
+            {
+                InsertSketchImage(sk, path);
+                return;
+            }
+            ShowToast(L("В буфере обмена нет изображения"));
+        }
+        catch (Exception ex) { ShowToast(L("Вставка изображения: {0}", ex.Message)); }
     }
 
     private void ShowSketchImageProperties(Sketch sk, SkImage im)
@@ -81,6 +115,11 @@ public partial class MainWindow
         NumRow("Высота", im.Height, h => im.Height = h, h => h > 0);
         NumRow("Поворот, °", im.Angle, a => im.Angle = a);
         NumRow("Прозрачность, %", Math.Round((1 - im.Opacity) * 100), t => im.Opacity = 1 - t / 100, t => t >= 0 && t <= 95);
+        // k185 (п. 4): инверсия — белый фон становится тёмным, и линии эскиза на нём видны
+        var inv = new CheckBox { Content = L("Инвертировать цвета"), IsChecked = im.Invert, Name = "prop_image_invert", Margin = new Avalonia.Thickness(0, 4, 0, 2) };
+        ToolTip.SetTip(inv, L("Белый фон становится тёмным — линии эскиза на нём видны"));
+        inv.IsCheckedChanged += (_, _) => { bool v = inv.IsChecked == true; if (v != im.Invert) { Apply(() => im.Invert = v); Session.MarkModified(); } };
+        PropsBody.Children.Add(inv);
         var keep = new Button { Content = L("Пропорции файла") };
         keep.Click += (_, _) => Apply(() => { if (im.PixelWidth > 0) im.Height = im.Width * im.PixelHeight / im.PixelWidth; });
         var del = new Button { Content = L("Удалить изображение") };

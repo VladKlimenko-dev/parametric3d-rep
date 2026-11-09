@@ -511,6 +511,38 @@ void main()
 
     // ------------------------------------------------------------------ фон
 
+    // ------------------------------------------------------------------ k185: изображение эскиза (подложка)
+
+    /// <summary>Прямоугольник по номеру вершины (6 вершин): угол uO, полные стороны uU (ширина), uV (высота).</summary>
+    public const string ImageVert = @"#version 330 core
+uniform mat4 uView;
+uniform mat4 uProj;
+uniform vec3 uO;
+uniform vec3 uU;
+uniform vec3 uV;
+out vec2 vUv;
+void main()
+{
+    vec2 c[6] = vec2[6](vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 1.0));
+    vec2 st = c[gl_VertexID];
+    vUv = vec2(st.x, 1.0 - st.y);
+    gl_Position = uProj * (uView * vec4(uO + uU * st.x + uV * st.y, 1.0));
+}";
+
+    /// <summary>Цвет текстуры (premultiplied); uInvert — инверсия цвета; uOpacity — общая прозрачность.</summary>
+    public const string ImageFrag = @"#version 330 core
+in vec2 vUv;
+uniform sampler2D uTex;
+uniform float uOpacity;
+uniform int uInvert;
+out vec4 oColor;
+void main()
+{
+    vec4 c = texture(uTex, vUv);
+    if (uInvert == 1) c.rgb = vec3(c.a) - c.rgb;
+    oColor = c * uOpacity;
+}";
+
     public const string BackgroundVert = @"#version 330 core
 out float vY;
 void main()

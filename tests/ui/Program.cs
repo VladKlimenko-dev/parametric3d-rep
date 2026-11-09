@@ -6565,6 +6565,29 @@ Check("UI-SKETCH-IMAGE-K184", () =>
         w.ShowProperties(); Run();
         var ptitle = w.FindControl<TextBlock>("PropsTitle")?.Text;
         Require(ptitle == Loc.L("ИЗОБРАЖЕНИЕ"), "the properties panel does not show the image: " + ptitle);
+        // k185 (замечание 09.11, 12:02): пиксели для кадра OpenGL (RGBA premultiplied, картинка — под линиями эскиза), флажок
+        // инверсии в свойствах (сохраняется), колесо мыши над изображением — масштаб вида, вставка из буфера (байты PNG)
+        var pxs = ModelViewport.PixelsOf(im);
+        Console.WriteLine($"  pixels {pxs?.W}x{pxs?.H} rgba {pxs?.Rgba[0]:X2}{pxs?.Rgba[1]:X2}{pxs?.Rgba[2]:X2}{pxs?.Rgba[3]:X2}, GL images {vp.GlSketchImages}");
+        Require(pxs != null && pxs.W == 40 && pxs.H == 20 && pxs.Rgba[0] == 0x33 && pxs.Rgba[1] == 0x66 && pxs.Rgba[2] == 0xCC && pxs.Rgba[3] == 255, "image pixels for the GL frame are wrong");
+        Require(SketchImageLayer.InvertedOf(im) != null, "no inverted bitmap");
+        var invCb = w.GetVisualDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Name == "prop_image_invert");
+        Require(invCb != null && invCb.IsChecked == false, "no invert check box in the image properties");
+        invCb!.IsChecked = true; Run();
+        Require(im.Invert, "the invert check box did not invert the image");
+        w.ImageLayer.Select(null); Run();
+        var cen = vp.Project(sk.Plane.ToWorld(im.Center));
+        var cw = cen is { } cc ? vp.TranslatePoint(cc, w) : null;
+        Require(cw != null, "image center is off screen");
+        var hit = w.InputHitTest(cw!.Value);
+        var st0 = vp.Camera.State;
+        w.MouseWheel(cw.Value, new Avalonia.Vector(0, 1)); Run();
+        var st1 = vp.Camera.State;
+        Console.WriteLine($"  wheel over image: hit {hit?.GetType().Name}, ortho {st0.OrthoHeight:0.###} -> {st1.OrthoHeight:0.###}, distance {st0.Distance:0.###} -> {st1.Distance:0.###}");
+        Require(st1.OrthoHeight != st0.OrthoHeight || st1.Distance != st0.Distance, "the mouse wheel over the image does not zoom");
+        var pasted = w.InsertSketchImageData(sk, "clip.png", File.ReadAllBytes(png)); Run();
+        Require(sk.Images.Count == 2 && pasted.PixelWidth == 40, "pasted image");
+        sk.Images.Remove(pasted); w.ImageLayer.Select(null);
         // файл детали: изображение на месте
         sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(10, 0)));
         w.FinishSketch(); Run();
@@ -6572,6 +6595,7 @@ Check("UI-SKETCH-IMAGE-K184", () =>
         var s2 = DocumentSession.Open(p3d);
         var sk2 = s2.Part!.Sketches.First();
         Require(sk2.Images.Count == 1 && sk2.Images[0].PixelWidth == 40 && Math.Abs(sk2.Images[0].Angle - 90) < 1e-9 && sk2.Images[0].Data.Length > 0, "the image is not saved with the sketch");
+        Require(sk2.Images[0].Invert, "the invert flag is not saved");
         w.Close();
     }
     finally { foreach (var f in new[] { png, p3d }) if (File.Exists(f)) File.Delete(f); }

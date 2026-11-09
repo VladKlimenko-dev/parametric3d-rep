@@ -18,11 +18,13 @@ public sealed class SkImage
     public double Angle;
     /// <summary>Прозрачность показа 0…1 (1 — непрозрачно).</summary>
     public double Opacity = 0.75;
+    /// <summary>k185 (замечание 09.11, 12:02, п. 4): показ инвертированным (белый фон — тёмным: линии эскиза видны).</summary>
+    public bool Invert;
 
     public SkImage Copy() => new()
     {
         FileName = FileName, PixelWidth = PixelWidth, PixelHeight = PixelHeight, Data = Data,
-        Center = Center, Width = Width, Height = Height, Angle = Angle, Opacity = Opacity,
+        Center = Center, Width = Width, Height = Height, Angle = Angle, Opacity = Opacity, Invert = Invert,
     };
 
     /// <summary>Оси прямоугольника на плоскости эскиза: (вдоль ширины, вдоль высоты), единичные.</summary>

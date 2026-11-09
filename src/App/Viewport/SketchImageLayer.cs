@@ -52,6 +52,39 @@ public sealed class SketchImageLayer : Control, ICustomHitTest
         return _bitmaps.GetValue(im.Data, d => { try { using var ms = new MemoryStream(d); return new Bitmap(ms); } catch { return null; } });
     }
 
+    private static readonly ConditionalWeakTable<ModelViewport.ImagePixels, Bitmap?> _inverted = new();
+
+    /// <summary>k185: инвертированная картинка для показа без OpenGL.</summary>
+    public static Bitmap? InvertedOf(SkImage im)
+    {
+        if (ModelViewport.PixelsOf(im) is not { } px) return null;
+        return _inverted.GetValue(px, p =>
+        {
+            try
+            {
+                var wb = new WriteableBitmap(new PixelSize(p.W, p.H), new Avalonia.Vector(96, 96), Avalonia.Platform.PixelFormats.Rgba8888, Avalonia.Platform.AlphaFormat.Premul);
+                var inv = (byte[])p.Rgba.Clone();
+                for (int i = 0; i < inv.Length; i += 4) { byte a = inv[i + 3]; inv[i] = (byte)(a - inv[i]); inv[i + 1] = (byte)(a - inv[i + 1]); inv[i + 2] = (byte)(a - inv[i + 2]); }
+                using (var fb = wb.Lock())
+                    for (int y = 0; y < p.H; y++) System.Runtime.InteropServices.Marshal.Copy(inv, y * p.W * 4, fb.Address + y * fb.RowBytes, p.W * 4);
+                return wb;
+            }
+            catch { return null; }
+        });
+    }
+
+    /// <summary>
+    /// k185 (замечание 09.11, 12:02, п. 1): КОЛЕСО МЫШИ НАД ИЗОБРАЖЕНИЕМ — масштаб вида: слой ловит мышь над картинкой (для
+    /// переноса), и колесо до вида не доходило. Передаётся виду в той же точке (слой и вид совпадают по месту).
+    /// </summary>
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        base.OnPointerWheelChanged(e);
+        _view.WheelAt(e.GetPosition(_view), e.Delta, e.KeyModifiers);
+        e.Handled = true;
+        InvalidateVisual();
+    }
+
     private Sketch? Sk => _view.ActiveSketch;
 
     private Point? Scr(Sketch sk, Vector2d p) => _view.Project(sk.Plane.ToWorld(p));
@@ -211,7 +244,8 @@ public sealed class SketchImageLayer : Control, ICustomHitTest
         foreach (var im in sk.Images)
         {
             if (Scr(sk, im.At(-1, 1)) is not { } tl || Scr(sk, im.At(1, 1)) is not { } tr || Scr(sk, im.At(-1, -1)) is not { } bl) continue;
-            var bmp = BitmapOf(im);
+            // k185 (п. 3): с OpenGL картинку рисует кадр вида — под линиями и точками эскиза; здесь — рамка и ручки
+            var bmp = _view.GlSketchImages ? null : im.Invert ? InvertedOf(im) : BitmapOf(im);
             if (bmp != null && im.PixelWidth > 0 && im.PixelHeight > 0)
             {
                 double pw = bmp.Size.Width, ph = bmp.Size.Height;
@@ -220,7 +254,7 @@ public sealed class SketchImageLayer : Control, ICustomHitTest
                 using (ctx.PushTransform(m))
                     ctx.DrawImage(bmp, new Rect(0, 0, pw, ph));
             }
-            if (Scr(sk, im.At(1, -1)) is { } br)
+            if (Scr(sk, im.At(1, -1)) is { } br && (ReferenceEquals(im, Selected) || !_view.GlSketchImages))
             {
                 var g = new StreamGeometry();
                 using (var gc = g.Open()) { gc.BeginFigure(tl, false); gc.LineTo(tr); gc.LineTo(br); gc.LineTo(bl); gc.EndFigure(true); }
