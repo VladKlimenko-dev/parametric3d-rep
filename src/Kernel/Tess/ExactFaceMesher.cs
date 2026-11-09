@@ -3318,6 +3318,7 @@ public static partial class ExactFaceMesher
     static readonly bool FlipCheckOff = Environment.GetEnvironmentVariable("P3D_MESHFLIPCHECK") == "0";
     static readonly bool RefineCacheOff = Environment.GetEnvironmentVariable("P3D_REFINECACHE") == "0";
 
+    static readonly bool RefineProjOff = Environment.GetEnvironmentVariable("P3D_REFINEPROJ") == "0";
     private static void Refine(ISurface3 src, List<Vector3d> P, List<Vector2d> UV, List<int> T, Vector2d scale, double seamU = 0)
     {
         // ПОРОГ — НЕ СТРОЖЕ, ЧЕМ НА КРАЯХ ГРАНИ. Края гранятся по шагу угла (у окружности R20
@@ -3456,7 +3457,10 @@ public static partial class ExactFaceMesher
                 if (good != null && good.Contains(key)) continue;
                 Interlocked.Increment(ref RefineEvals);
                 double dPar = (src.PointAt(new Vector2d(m.X / scale.X, m.Y / scale.Y)) - c3).Length;
-                double dev3 = dPar > tol ? dPar : (src.PointAt(src.ProjectToUV(c3)) - c3).Length;
+                // k185: при dPar ≤ tol вторая мера решения не меняет — до ближайшей точки поверхности не дальше, чем до любой
+                // её точки (dPar); полная проекция на NURBS у каждого годного треугольника каждой грани была лишней работой:
+                // колесо 28035T11 — 1171 с и 129 ГБ выделений в уточнении. Мутация P3D_REFINEPROJ=0 — прежняя проверка.
+                double dev3 = dPar > tol || !RefineProjOff ? dPar : (src.PointAt(src.ProjectToUV(c3)) - c3).Length;
                 if (dev3 > tol) bad.Add((T[t], T[t + 1], T[t + 2]));
                 else good?.Add(key);
             }
@@ -3485,7 +3489,7 @@ public static partial class ExactFaceMesher
                 Vector3d c3b = (P[a] + P[b] + P[c]) / 3;
                 if (MeshTrace) Console.Error.WriteLine($"MESHTRACE   insert onS {onS} c3b {c3b}");
                 bool flipT = flipBad.Contains(Key(a, b, c));
-                if (!flipT && (onS - c3b).Length <= tol && (src.PointAt(src.ProjectToUV(c3b)) - c3b).Length <= tol) { SkipRecheck++; continue; }
+                if (!flipT && (onS - c3b).Length <= tol && (!RefineProjOff || (src.PointAt(src.ProjectToUV(c3b)) - c3b).Length <= tol)) { SkipRecheck++; continue; }
                 if (MeshTrace) Console.Error.WriteLine($"MESHTRACE   insert recheck done");
                 // Точка в микронах от вершины узкого треугольника даёт сторону, которую
                 // экспорт склеит, — такую вставку пропускаем.
