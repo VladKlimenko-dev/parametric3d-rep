@@ -10,7 +10,7 @@ namespace Parametric3D.Kernel.Exact;
 internal static class ExactContactInput
 {
     /// <summary>Трасса подбора контактных плоскостей (только для разбора; null — выключено).</summary>
-    [ThreadStatic] internal static Action<string>? Trace;
+    [ThreadStatic] internal static Action<string>? Trace = null;
     /// <summary>
     /// Своя точная плоскость каждой плоской грани резца без контакта — только в общем пути булевой
     /// (localSources == null). В пути резца скругления (TryAttach) её не дают: на 88 проверках FProbe
