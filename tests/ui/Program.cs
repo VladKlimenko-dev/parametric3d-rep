@@ -6631,7 +6631,7 @@ Check("UI-SKETCH-IMAGE-UNDO-K185", () =>
         Console.WriteLine($"  undo: images {sk.Images.Count}, width {sk.Images[0].Width:0.###} (was {w0:0.###}), selected in sketch {sel != null && sk.Images.Contains(sel)}, handles {w.ImageLayer.Handles(out _).Count}");
         Require(Math.Abs(sk.Images[0].Width - w0) < 1e-9, "undo did not restore the size");
         Require(sel != null && sk.Images.Contains(sel), "the selection stays on the old image object after undo");
-        Require((w.ImageLayer.Handles(out _)[0].P - vp.Project(sk.Plane.ToWorld(sel!.At(-1, -1)))!.Value).Length < 1e-6, "handles are not at the restored image");
+        { var hp = w.ImageLayer.Handles(out _)[0].P; var ep = vp.Project(sk.Plane.ToWorld(sel!.At(-1, -1)))!.Value; Require(Math.Abs(hp.X - ep.X) + Math.Abs(hp.Y - ep.Y) < 1e-6, "handles are not at the restored image"); }
         w.ImageLayer.InvalidateVisual(); Run();
         // (2) поворот: 87° → 90°, 80° — как есть, 183° → 180°
         foreach (var (deg, want) in new[] { (87.0, 90.0), (80.0, 80.0), (183.0, 180.0), (-92.0, -90.0) })
