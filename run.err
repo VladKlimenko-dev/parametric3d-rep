@@ -1,0 +1,25 @@
+XTRING edge 245 curve 240 INTERSECTION sense + chosen 1.668 mm other 5.822 old 1.668
+XTRING edge 216 curve 208 INTERSECTION sense + chosen 1.668 mm other 5.822 old 5.822
+XTRING edge 206 curve 204 INTERSECTION sense + chosen 1.668 mm other 5.822 old 5.822
+XTRING edge 239 curve 217 INTERSECTION sense + chosen 1.668 mm other 5.822 old 1.668
+XTINT node 2105 chart 6 dense 20 offA 0.0537 mm (XtBlendSurf) offB 1.34E-21 mm (Pl)
+XTINT node 2100 chart 6 dense 18 offA 0.0453 mm (XtBlendSurf) offB 4.13E-18 mm (Pl)
+XTINT node 2052 chart 6 dense 20 offA 0.0773 mm (XtBlendSurf) offB 4.13E-18 mm (Pl)
+XTINT node 2062 chart 6 dense 14 offA 0.0898 mm (XtBlendSurf) offB 1.34E-21 mm (Pl)
+XTINT node 2146 chart 21 dense 161 offA 0.194 mm (BlendBound) offB 1.09E-14 mm (XtNurbsSurf)
+XTINT node 2140 chart 22 dense 166 offA 0.233 mm (BlendBound) offB 1.05E-14 mm (XtNurbsSurf)
+XTINT node 1972 chart 22 dense 169 offA 0.182 mm (BlendBound) offB 3.81E-15 mm (XtNurbsSurf)
+XTINT node 2051 chart 21 dense 161 offA 0.181 mm (BlendBound) offB 7.17E-15 mm (XtNurbsSurf)
+XTINT node 2487 chart 6 dense 18 offA 4.13E-18 mm (Pl) offB 0.0453 mm (XtBlendSurf)
+XTINT node 2530 chart 6 dense 20 offA 1.34E-21 mm (Pl) offB 0.0536 mm (XtBlendSurf)
+XTINT node 2446 chart 6 dense 20 offA 1.34E-21 mm (Pl) offB 0.089 mm (XtBlendSurf)
+XTINT node 2436 chart 6 dense 20 offA 4.13E-18 mm (Pl) offB 0.0703 mm (XtBlendSurf)
+XTINT node 2533 chart 22 dense 166 offA 6.96E-15 mm (XtNurbsSurf) offB 0.214 mm (BlendBound)
+XTINT node 2553 chart 21 dense 161 offA 7.5E-15 mm (XtNurbsSurf) offB 0.193 mm (BlendBound)
+XTINT node 2354 chart 22 dense 169 offA 6.95E-15 mm (XtNurbsSurf) offB 0.182 mm (BlendBound)
+XTINT node 2434 chart 21 dense 161 offA 7.27E-15 mm (XtNurbsSurf) offB 0.181 mm (BlendBound)
+XTRING edge 2876 curve 2871 INTERSECTION sense + chosen 1.668 mm other 5.822 old 1.668
+XTRING edge 2847 curve 2839 INTERSECTION sense + chosen 1.668 mm other 5.822 old 5.822
+XTRING edge 2837 curve 2835 INTERSECTION sense + chosen 1.668 mm other 5.822 old 5.822
+XTRING edge 2870 curve 2848 INTERSECTION sense + chosen 1.668 mm other 5.822 old 1.668
+seconds 19 nproc 4 env P3D_SLDNAME=7254K613 P3D_SLDDIAG=1 P3D_SLDDIAGOBJ=res/out P3D_XTINTDBG=1 cmd sldprt corpus
