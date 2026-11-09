@@ -1,0 +1,25 @@
+XTINT node 147 chart 22 dense 169 offA 1.03E-11 mm (XtNurbsSurf) offB 0.0138 mm (BlendBound)
+XTINT   B worst (5.991911009052382E-08, 0.021031199999914645, 0.006032055115272445) centre (-0.00010803121979625301, 0.02073269709332932, 0.006051444300756552) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.01378 mm, q-centre 0.3181 mm, spine pts 1291 nearest 0.1849 mm
+XTINT node 141 chart 22 dense 169 offA 1.12E-11 mm (XtNurbsSurf) offB 0.33 mm (BlendBound)
+XTINT   B worst (-0.006114302820831159, 0.02012278992722371, -0.006338507060784869) centre (-0.006035456301077143, 0.020474036954273488, -0.006618326374968424) d0 0.3139 mm (R0 0.3175) d1 0.3174 mm (R1 0.3175) contact off 0.33 mm, q-centre 0.4559 mm, spine pts 1331 nearest 0.3014 mm
+XTINT node 159 chart 22 dense 169 offA 7.17E-15 mm (XtNurbsSurf) offB 0.0535 mm (BlendBound)
+XTINT   B worst (-0.005190793821690214, 0.020052748764421317, -0.006703143596929626) centre (-0.005225918427793103, 0.020043631015836057, -0.0063832161880896824) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.05352 mm, q-centre 0.322 mm, spine pts 1331 nearest 0.05233 mm
+XTINT node 146 chart 21 dense 161 offA 5.22E-15 mm (XtNurbsSurf) offB 0.267 mm (BlendBound)
+XTINT   B worst (0.012888507084193949, 0.002078350107872524, -0.001567774267603932) centre (0.013156585003894319, 0.002094743021304321, -0.0012513815368456196) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.2673 mm, q-centre 0.415 mm, spine pts 1291 nearest 0.01903 mm
+XTINT node 252 chart 21 dense 160 offA 4.44E-11 mm (XtNurbsSurf) offB 0.331 mm (BlendBound)
+XTINT   B worst (0.0010978903506664792, 0.012958374119383708, 0.006206183381649852) centre (0.0012998962253837662, 0.013258730974961594, 0.005923560317606805) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.3307 mm, q-centre 0.4592 mm, spine pts 1291 nearest 0.007782 mm
+XTINT node 243 chart 21 dense 160 offA 4.44E-11 mm (XtNurbsSurf) offB 0.302 mm (BlendBound)
+XTINT   B worst (-0.0046890193446617835, 0.01213004207022332, -0.006522823141730276) centre (-0.004645346137234126, 0.012486169811075086, -0.006269631928518621) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.3023 mm, q-centre 0.4391 mm, spine pts 1291 nearest 0.009203 mm
+XTINT node 194 chart 21 dense 161 offA 3.88E-15 mm (XtNurbsSurf) offB 0.0929 mm (BlendBound)
+XTINT   B worst (0.004216791033080281, 0.012302174459148827, 0.005982126227576299) centre (0.004196535213468669, 0.011977157907952625, 0.0059257877124981205) d0 0.3137 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.09294 mm, q-centre 0.3305 mm, spine pts 1291 nearest 0.6863 mm
+XTINT node 202 chart 22 dense 169 offA 1.04E-14 mm (XtNurbsSurf) offB 0.0201 mm (BlendBound)
+XTINT   B worst (6.074223144749064E-08, 0.02071369995094021, 0.006349996794887958) centre (-0.00011100069972326597, 0.020733791496799627, 0.006052535557227722) d0 0.3175 mm (R0 0.3175) d1 0.3175 mm (R1 0.3175) contact off 0.02009 mm, q-centre 0.3182 mm, spine pts 1291 nearest 0.1881 mm
+XTINT node 357 chart 6 dense 6 offA 0.000886 mm (XtBlendSurf) offB 8.09E-12 mm (Pl)
+XTINT node 138 chart 6 dense 13 offA 0.0621 mm (XtBlendSurf) offB 8.82E-11 mm (Pl)
+XTINT node 222 chart 6 dense 17 offA 0.0242 mm (XtBlendSurf) offB 1.47E-10 mm (Pl)
+XTINT node 315 chart 6 dense 6 offA 0.000936 mm (XtBlendSurf) offB 9.54E-12 mm (Pl)
+XTINT node 336 chart 6 dense 19 offA 0.0734 mm (XtBlendSurf) offB 5.94E-15 mm (Pl)
+XTINT node 308 chart 6 dense 6 offA 0.11 mm (XtBlendSurf) offB 4.12E-15 mm (Pl)
+XTINT node 9 chart 6 dense 6 offA 0.000875 mm (XtBlendSurf) offB 1.29E-11 mm (Pl)
+XTINT node 49 chart 6 dense 13 offA 0.059 mm (XtBlendSurf) offB 2.16E-11 mm (Pl)
+seconds 9 nproc 4 env P3D_SLDNAME=92146a038 P3D_XTINTDBG=1 cmd sldprt
