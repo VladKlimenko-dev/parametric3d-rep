@@ -52,12 +52,15 @@ jobs:
           tail -30 res/build.log
           export DOTNET_TieredCompilation=0 P3D_USERMODELS="$PWD/tests/ui/data"
           if [ -x out/ui/Parametric3D.UiChecks ]; then timeout 40m out/ui/Parametric3D.UiChecks "UI-PATTERN-STAGE-K185|UI-NECK-CUT-K185|UI-SKETCH-IMAGE-UNDO-K185|UI-SKETCH-NECK-K185|UI-SKETCH-DIMEXT-K185|UI-SKETCH-K123|UI-SKETCH-IMAGE-K184|UI-SKETCH-K106|UI-IMPORT-INTO-K184|UI-IMPORT-STEP|UI-IMPORT-ASSEMBLY|UI-IMPORT-PART-SHOW|UI-STL-IMPORT-K119" > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err; fi
-          for e in P3D_FLUXHINT=0 P3D_NURBSMULTIBLOCKS=0 P3D_CAPFIX=0 P3D_HEALEDGETOL=0 P3D_HEALSIDE=0; do echo "== $e" >> res/run.log; env $e out/ui/Parametric3D.UiChecks "UI-NECK-CUT-K185" >> res/run.log 2>&1 || true; done
+          for e in P3D_LOADFACETED=0; do echo "== $e" >> res/mut.log; env $e out/ui/Parametric3D.UiChecks "UI-NECK-CUT-K185" >> res/mut.log 2>&1 || true; done
       - name: Итог — в ветку ya1/res/k184_app
         if: always()
         run: |
           cd res && git init -q -b r && git config user.name github-actions && git config user.email github-actions@users.noreply.github.com
           git add -A && git commit -q -m "app ${GITHUB_SHA::7}" && git push -f -q "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" r:ya1/res/k184_app
+      - name: Проверки UI прошли
+        run: |
+          if grep -q '"ok":false' res/run.log || ! grep -q '"failed":0' res/run.log; then grep '"ok":false' res/run.log | head -20; exit 1; fi
 
   probe:
     needs: build

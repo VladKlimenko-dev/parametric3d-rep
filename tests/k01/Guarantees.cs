@@ -27,6 +27,7 @@ static partial class Program
         ["Core.Settings.DisplayUnitSuffix"] = "k123: обозначение единицы длины показа — интерфейс, не геометрия",
         ["Kernel.Topology.AnalyticVolume.OriginShift"] = "KRN-02: переключатель разбора (P3D_VOLORIGIN), только для замеров",
         ["Core.AppLog.Path"] = "журнал приложения", ["Core.AppLog.MaxBytes"] = "журнал приложения",
+        ["Model.DocumentFile.FacetedReloads"] = "k185: счётчик открытий с пересчётом из-за гранёных граней в записанных телах (Interlocked, разбор)",
         ["Model.DocumentStorage.MaxBytes"] = "предел размера файла документа при загрузке",
         // атомарные выдачи номеров
         ["Core.Ids._next"] = "выдача номеров (Interlocked)",

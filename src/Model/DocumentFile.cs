@@ -1729,8 +1729,15 @@ public static class DocumentFile
                             part.RestoreFromFile(bodies, cached, display.Volume, display.Area, display.BodyNames ?? new(), display.Warnings ?? new(),
                                 display.Errors ?? new(), display.Created ?? new(), table, quilts);
                             part.LoadNote = LoadNoteKind.Restored;
+                            // k185: В ЗАПИСАННЫХ ТЕЛАХ ГРАНЁНЫЕ ГРАНИ — тела показываются сразу, но деталь пересчитывается с начала дерева
+                            // (без записанного состояния перед последней операцией). Файл, записанный во время предпросмотра, хранил
+                            // приближение по сетке (шейка DLOT: 35 граней тела вращения гранёные), и оно оставалось навсегда: открытие
+                            // по записанным телам расчёта не делает. Пересчёт даёт точную геометрию или законное приближение.
+                            // Мутация P3D_LOADFACETED=0.
+                            bool approx = !LoadFacetedOff && bodies.Any(r => Kernel.Topology.GeometryAudit.Faceted(r.Body).Faces > 0);
+                            if (approx) { part.Invalidate(); Interlocked.Increment(ref FacetedReloads); }
                             // k156: состояние перед последней операцией
-                            if (display.Checkpoint is { Brep: { } cb } cpd && !CheckpointSaveOff)
+                            else if (display.Checkpoint is { Brep: { } cb } cpd && !CheckpointSaveOff)
                             {
                                 try
                                 {
@@ -1757,6 +1764,9 @@ public static class DocumentFile
         return (part, table);
     }
     public static long DisplayRejected;
+    /// <summary>k185: открытий с пересчётом из-за гранёных граней в записанных телах (разбор).</summary>
+    public static long FacetedReloads;
+    static readonly bool LoadFacetedOff = Environment.GetEnvironmentVariable("P3D_LOADFACETED") == "0";
     /// <summary>k156: мутация P3D_SAVECHECKPOINT=0 — состояние перед последней операцией не пишется и не читается.</summary>
     static readonly bool SpecMapOff = Environment.GetEnvironmentVariable("P3D_SPECMAP") == "0";
     static readonly bool CheckpointSaveOff = Environment.GetEnvironmentVariable("P3D_SAVECHECKPOINT") == "0";
