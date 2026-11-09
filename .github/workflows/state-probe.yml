@@ -53,7 +53,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185o_two, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=1939K119,6450K1_ P3D_SLDDIAG=1' }
+          - { name: k185q_p1, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=8761K424 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185q_p2, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=28035T11 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185q_p3, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=6169K417 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185q_p4, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=6169K419 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185q_p5, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=6169K406 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185q_p6, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=47995K19 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185q_p7, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=6168T54 P3D_SLDPROF=1 P3D_SLDDIAG=1 P3D_SLDTIMEOUT=1500' }
+          - { name: k185q_allA, cmd: 'allA', env: '' }
+          - { name: k185q_allB, cmd: 'allB', env: '' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

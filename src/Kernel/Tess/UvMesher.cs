@@ -319,7 +319,13 @@ public static class UvMesher
         var tris = new List<int>();
         foreach (var (po, ph) in pieces)
         {
-            var tr = Triangulator.Triangulate(po.Select(x => x.Uv).ToList(), ph.Select(h => (IReadOnlyList<Vector2d>)h.Select(x => x.Uv).ToList()).ToList(), out var uvs);
+            var poUv = po.Select(x => x.Uv).ToList(); var phUv = ph.Select(h => (IReadOnlyList<Vector2d>)h.Select(x => x.Uv).ToList()).ToList();
+            List<int> tr; List<Vector2d> uvs;
+            // k185: большая область — сперва Делоне с ограничениями (ушная — O(n²)…O(n³): 6169K406, 437 с на 82 грани),
+            // не вышло — ушная, как прежде. Мутация P3D_CDTBIG=0.
+            if (!ExactFaceMesher.CdtBigOff && poUv.Count + phUv.Sum(h => h.Count) >= ExactFaceMesher.CdtBigN
+                && Cdt.Triangulate(poUv, phUv, out var cdtPts) is { Count: > 0 } cdtTris) { tr = cdtTris; uvs = cdtPts; }
+            else { tr = Triangulator.Triangulate(poUv, phUv, out var earPts); uvs = earPts; }
             if (tr.Count == 0) { why = "the parameter-space triangulation failed"; return null; }
             var map = uvs.Select(u => { var k = (u.X, u.Y); if (!index.TryGetValue(k, out int id)) { id = uvList.Count; uvList.Add(u); index[k] = id; } return id; }).ToList();
             tris.AddRange(tr.Select(i => map[i]));

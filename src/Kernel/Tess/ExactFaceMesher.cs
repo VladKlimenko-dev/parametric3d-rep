@@ -25,6 +25,10 @@ namespace Parametric3D.Kernel.Tess;
 /// </summary>
 public static partial class ExactFaceMesher
 {
+    /// <summary>k185: с какого числа точек контура грань сперва размечается Делоне с ограничениями (P3D_CDTBIG=0 — прежний порядок).</summary>
+    internal const int CdtBigN = 1000;
+    internal static readonly bool CdtBigOff = Environment.GetEnvironmentVariable("P3D_CDTBIG") == "0";
+
     /// <summary>ДИАГНОСТИКА: неудачные попытки триангуляции.</summary>
     public static Action<string>? TryDebug;
 
@@ -2229,6 +2233,7 @@ public static partial class ExactFaceMesher
             candidates.Add(() => MonotoneZipper(outerS, true) is { } z ? (z, outerS) : null);
             candidates.Add(() => MonotoneZipper(outerS, false) is { } z ? (z, outerS) : null);
         }
+        int earAt = candidates.Count;
         candidates.Add(() =>
         {
             KernelContext.Checkpoint("mesh.triangulate");
@@ -2269,6 +2274,15 @@ public static partial class ExactFaceMesher
             var t = Cdt.Triangulate(outerS, holesS.Select(h => (IReadOnlyList<Vector2d>)h).ToList(), out var p2);
             return t == null ? null : (t, p2);
         });
+
+        // k185: БОЛЬШОЙ КОНТУР — СПЕРВА ДЕЛОНЕ. Ушная триангуляция проверяет каждое ухо по всем вершинам (O(n²)…O(n³)): на
+        // контурах в тысячи точек (6169K4xx — зубья шестерни по NURBS) она шла 13–25 с на грань и всё равно не проходила
+        // самопроверку, а Делоне с ограничениями давал годную сетку за 0,7 с. Так размечает и OCCT (BRepMesh_Delaun —
+        // единственный способ). На малых гранях порядок прежний. Мутация P3D_CDTBIG=0.
+        if (!CdtBigOff && outerS.Count + holesS.Sum(h => h.Count) >= CdtBigN && candidates.Count > earAt + 1)
+        {
+            var cdtCand = candidates[^1]; candidates.RemoveAt(candidates.Count - 1); candidates.Insert(earAt, cdtCand);
+        }
 
         // ПОРЯДОК СПОСОБОВ — «СПЕРВА ПРОСТЫЕ», И МЕНЯТЬ ЕГО НЕ СТОИТ. Пробовал подсказывать:
         // запоминать номер способа, сработавшего на поверхности такого же вида, и пробовать его

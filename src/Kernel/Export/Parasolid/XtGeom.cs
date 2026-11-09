@@ -1026,6 +1026,16 @@ internal sealed class XtBlendSurf : XtSurf
         return bl;
     }
 
+    static readonly bool SpineNewtonOff = Environment.GetEnvironmentVariable("P3D_XTSPINENEWTON") == "0";
+    /// <summary>Точка смещённой опоры у q и нормаль её касательной плоскости (от опоры к q); false — q на самой опоре.</summary>
+    static (Vector3d O, Vector3d N, bool Ok) OffsetN(XtSurf s, Vector3d q, double d)
+    {
+        var p = s.Project(q); var t = q - p;
+        if (t.LengthSquared < 1e-30) return (p, Vector3d.Zero, false);
+        var n = t.Normalized();
+        return (p + n * d, n, true);
+    }
+
     static Vector3d Offset(XtSurf s, Vector3d q, double d)
     {
         var p = s.Project(q); var t = q - p;
@@ -1096,6 +1106,31 @@ internal sealed class XtBlendSurf : XtSurf
     {
         if (tg.LengthSquared < 1e-30) return OnSpine(c0);
         tg.Normalize();
+        // k185: НЬЮТОН ПО КАСАТЕЛЬНЫМ ПЛОСКОСТЯМ. Центр — пересечение трёх поверхностей: двух смещённых опор и плоскости сечения;
+        // шаг — пересечение их касательных плоскостей (касательная плоскость смещённой опоры параллельна плоскости опоры в
+        // основании перпендикуляра). Сходится за 3–5 шагов, попеременная проекция ниже — линейно, с отношением cos²θ, и на
+        // опорах под малым углом выбирала все 40 шагов по две проекции на B-поверхность (переходник 8761K424: 11 млн проекций,
+        // 495 с на 104 кривые пересечения). Опоры почти параллельны или шаг расходится — прежняя итерация. P3D_XTSPINENEWTON=0.
+        if (!SpineNewtonOff && R0 > 1e-12 && R1 > 1e-12)
+        {
+            var cn = c0; bool ok = false;
+            double lim = 10 * Math.Max(R0, R1);
+            for (int it = 0; it < 12; it++)
+            {
+                var (o0, n0, g0) = OffsetN(S0, cn, R0); var (o1, n1, g1) = OffsetN(S1, cn, R1);
+                if (!g0 || !g1) break;
+                var n1t = Vector3d.Cross(n1, tg); double det = Vector3d.Dot(n0, n1t);
+                if (Math.Abs(det) < 1e-3) break;   // опоры почти параллельны: плоскости не задают точку надёжно
+                double d0 = Vector3d.Dot(n0, o0), d1 = Vector3d.Dot(n1, o1), d2 = Vector3d.Dot(tg, c0);
+                var x = (d0 * n1t + d1 * Vector3d.Cross(tg, n0) + d2 * Vector3d.Cross(n0, n1)) / det;
+                double step = (x - cn).Length;
+                if (!(step < lim) || (x - c0).Length > lim) break;
+                cn = x;
+                if (step < 1e-11) { ok = true; break; }
+            }
+            if (ok) { if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: центр шара — Ньютон", 1); return cn; }
+            if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count("XT: центр шара — попеременно", 1);
+        }
         var c = c0;
         for (int it = 0; it < 40; it++)
         {

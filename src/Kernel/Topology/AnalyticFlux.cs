@@ -257,6 +257,7 @@ public static class AnalyticFlux
             BKnots = !FluxKnotsOff && s is NurbsSurface nk ? nk.KnotsV.Distinct().OrderBy(x => x).ToArray() : null
         };
     }
+    static readonly bool FluxSpan1Off = Environment.GetEnvironmentVariable("P3D_FLUXSPAN1") == "0";
     static readonly bool FluxKnotsOff = Environment.GetEnvironmentVariable("P3D_FLUXKNOTS") == "0";
     static readonly bool FluxHintOff = Environment.GetEnvironmentVariable("P3D_FLUXHINT") == "0";
 
@@ -334,7 +335,10 @@ public static class AnalyticFlux
             for (int c = 0; c + 1 < cuts.Count; c++)
             {
                 double c0 = cuts[c], c1 = cuts[c + 1];
-                int np = Math.Max(2, (int)Math.Ceiling(pieces * (c1 - c0) / (a1 - a0)));
+                // k185: пролётов узлов не меньше, чем кусков, — по одному куску на пролёт: между узлами подынтегральное гладкое
+                // (у нерациональной бикубической — многочлен 8-й степени, Гаусс по 8 узлам точен до 15-й), а два куска на пролёт
+                // удваивали работу: объём граней NURBS с десятками узлов — 0,5 с на грань (клапан 47995K19: 82 с). P3D_FLUXSPAN1=0.
+                int np = Math.Max(!FluxSpan1Off && cuts.Count - 1 >= pieces ? 1 : 2, (int)Math.Ceiling(pieces * (c1 - c0) / (a1 - a0)));
                 double st = (c1 - c0) / np;
                 for (int k = 0; k < np; k++)
                 {
