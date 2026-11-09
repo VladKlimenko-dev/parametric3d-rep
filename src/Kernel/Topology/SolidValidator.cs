@@ -796,6 +796,10 @@ public static class SolidValidator
         try { af = Analytic.AnalyticFace.Of(f, out _); } catch { return null; }
         // цилиндр, конус, шар (диск вращения — нет: плоская форма, у плоских граней своя проверка ролей колец)
         if (af == null || af.Band || af.Param || af.Tor || af.FullSurface || !(af.Cyl || af.Sph)) return null;
+        // k185: область цилиндра переходит через шов (границы с θ < 0 или > 2π) — принадлежность точки пробы (θ в [0, 2π))
+        // у шва решается неверно, и проверка ложно видела «материал справа» (вырез шейки DLOT): такая грань не судится
+        // (у грани с фасетами остаётся сверка по фасетам выше). Мутация P3D_LOOPSEAM=0.
+        if (!LoopSeamOff && af.Cyl && af.Bounds.Any(sg => Math.Min(sg.A.X, sg.B.X) < -1e-9 || Math.Max(sg.A.X, sg.B.X) > 2 * Math.PI + 1e-9)) return null;
         var uses = new Dictionary<TEdge, int>(ReferenceEqualityComparer.Instance);
         foreach (var ce in f.Loops.SelectMany(l => l.CoEdges)) uses[ce.Edge] = uses.GetValueOrDefault(ce.Edge) + 1;
         int against = 0, agree = 0;
