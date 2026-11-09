@@ -1,0 +1,1 @@
+seconds 124 nproc 4 env P3D_SLDNAME=5706N12,1106K87,1423N3 P3D_SLDDIAG=1 P3D_SLDDIAGOBJ=res/out cmd sldprt corpus
