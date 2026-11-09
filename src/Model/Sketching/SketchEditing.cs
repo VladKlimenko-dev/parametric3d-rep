@@ -147,6 +147,24 @@ public static class SketchEditing
             ok = Reach(sk, d, from, value, solver, st0, out st);
             if (ok) Interlocked.Increment(ref FreeEdits);
         }
+        // k185 (замечание 10.11, 08:41, а5): НЕ ВЫШЛО НИ С БЛИЖНИМИ СЛАБЫМИ, НИ БЕЗ НИХ — удерживаются ВСЕ слабые размеры, как в
+        // Creo (слабые сохраняют значения, пока не мешают). Деталь 100395799: d30 (высота горизонтали над осью) 1.07″ → 0.5″ —
+        // слабый d8 (длина вертикали у оси) не удерживался, нижний конец вертикали стоял, верхний проходил сквозь него: отрезок
+        // вырождался в точку, и расстояние до него (d20) теряло смысл — «противоречие со всеми связями и размерами». С
+        // удержанными слабыми вертикаль сдвигается целиком. Мутация P3D_SKHOLDALLWEAK=0.
+        if (!ok && !HoldAllWeakOff)
+        {
+            geo.Restore();
+            var allWeak = sk.Dimensions.Where(x => !ReferenceEquals(x, d) && x.IsDefault && !x.Locked && x.Enabled && !x.Reference).ToList();
+            if (allWeak.Count > 0)
+            {
+                foreach (var w in allWeak) { double m = DimensionMeasure.Value(w); if (!double.IsNaN(m)) w.Value = m; w.Locked = true; }
+                try { ok = Reach(sk, d, from, value, solver, st0, out st); }
+                finally { foreach (var w in allWeak) w.Locked = false; }
+                if (ok) { res.HeldWeak = true; Interlocked.Increment(ref HeldAllWeakEdits); }
+                else geo.Restore();
+            }
+        }
         if (ok && Shrunk(sk, sizes0, scale0, own) is { Count: > 0 } shrunk)
         {
             // k124: размер достигнут ценой стянутого элемента — снова, удерживая его длину; иначе — отказ «вырождение»
@@ -467,6 +485,9 @@ public static class SketchEditing
             if (x.IsDriving && !focus.Contains(x) && Touches(x.Items) && !res.Dimensions.Contains(x)) res.Dimensions.Add(x);
         res.Related = res.Constraints.Count + res.Dimensions.Count > 0;
     }
+    public static readonly bool HoldAllWeakOff = Environment.GetEnvironmentVariable("P3D_SKHOLDALLWEAK") == "0";
+    /// <summary>k185: правок, вышедших только с удержанием всех слабых размеров (разбор).</summary>
+    public static long HeldAllWeakEdits;
     public static readonly bool RelatedOff = Environment.GetEnvironmentVariable("P3D_SKRELATED") == "0";
 
     public static void Diagnose(Sketch sk, ISketchSolver solver, Geometry geo, SolveStatus st0, bool redundant, IReadOnlyCollection<object> focus, SketchEditResult res)

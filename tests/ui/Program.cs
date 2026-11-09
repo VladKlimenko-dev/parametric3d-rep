@@ -6846,6 +6846,7 @@ Check("UI-SKETCH-D30-K185", () =>
         var res = SketchEditing.SetDimensionValue(sk, d, inch * 25.4, null, solver);
         Console.WriteLine($"  d30 = {inch} in: ok {res.Ok}, failure {res.Failure}, status {res.Status}, related {res.Related}, cons {res.Constraints.Count}, dims {string.Join(",", res.Dimensions.Select(x => x.Name))}, degenerate {string.Join(",", res.Degenerate.Select(e => e.Id))}");
         if (res.Ok) SketchEditing.SetDimensionValue(sk, d, v0, null, solver);
+        else if (!SketchEditing.HoldAllWeakOff) bad.Add($"{inch} in: {res.Failure}");
     }
     // путь окна: правка эскиза в окне (вход в эскиз), затем то же
     var w = Open(s);
@@ -6891,6 +6892,8 @@ Check("UI-SKETCH-PLANE-K185", () =>
         Require(w.InSketch, "a plane selected in the view did not start the sketch");
         w.CancelSketch(); Run();
         vp.Selection.Clear(); Run();
+        vp.Camera.State.Rotation = Parametric3D.Render.Camera.OrientationQuat(Parametric3D.Render.ViewOrientation.Front); vp.ZoomToFit(animate: false); Run();
+        sp = vp.Project(cw); Require(sp != null, "plane point is off the view after the sketch");
         w.StartOperation(new SketchOp()); Run();
         Require(w.CurrentOperation is SketchOp, "sketch panel did not open");
         vp.SimulatePick(sp.Value.X / vp.Bounds.Width, sp.Value.Y / vp.Bounds.Height, select: true); Run(); Run();
