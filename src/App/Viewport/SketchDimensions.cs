@@ -182,6 +182,9 @@ public static class SketchDimensions
     }
     /// <summary>Разбор и проверки (k130): размерная линия последнего размера по горизонтали / вертикали.</summary>
     public static (Vector2d A, Vector2d B) LastAxisDim;
+    /// <summary>Разбор и проверки (k185): выносные линии последнего линейного размера (координаты эскиза).</summary>
+    public static readonly List<(Vector2d A, Vector2d B)> LastExtensions = new();
+    static readonly bool ExtAlongOff = Environment.GetEnvironmentVariable("P3D_SKDIMEXTALONG") == "0";
 
     private static void BuildLinear(SkDimension d, Frame3 plane, DimBatch batch,
                                     double px, LineStyle style)
@@ -193,15 +196,15 @@ public static class SketchDimensions
         // отрезка — тогда выносная линия висела в пустоте и не доходила
         // до геометрии. Чертёжная норма в этом случае требует тонкого
         // продолжения отрезка до точки замера.
-        switch (d.Type)
+        // k185: у концов на ПРЯМОЙ, параллельной направлению выноса, выносная — продолжение самого отрезка (см. ниже); прочие —
+        // прежнее тонкое продолжение до точки замера
+        SkLine? la = d.Type == DimensionType.DistanceLineLine && d.Items.Count >= 2 ? d.Items[0] as SkLine : null;
+        SkLine? lb = d.Type is DimensionType.DistanceLineLine or DimensionType.DistancePointLine && d.Items.Count >= 2 ? d.Items[1] as SkLine : null;
+        if (ExtAlongOff)
         {
-            case DimensionType.DistancePointLine when d.Items.Count >= 2 && d.Items[1] is SkLine gl:
-                GeometryExtension(batch, plane, style, gl, b);
-                break;
-            case DimensionType.DistanceLineLine when d.Items.Count >= 2:
-                if (d.Items[0] is SkLine g1) GeometryExtension(batch, plane, style, g1, a);
-                if (d.Items[1] is SkLine g2) GeometryExtension(batch, plane, style, g2, b);
-                break;
+            if (la != null) GeometryExtension(batch, plane, style, la, a);
+            if (lb != null) GeometryExtension(batch, plane, style, lb, b);
+            la = lb = null;
         }
 
         Vector2d span = b - a;
@@ -236,8 +239,27 @@ public static class SketchDimensions
         double over = (Math.Abs(off) + OverrunPx * px) * sign;
 
         // Выносные линии — от геометрии чуть дальше размерной.
-        Line(batch, plane, style, a + nrm * gap, a + nrm * over);
-        Line(batch, plane, style, b + nrm * gap, b + nrm * over);
+        // k185 (замечание 09.11, 12:39, пп. 1–2): РАЗМЕР ДО ОТРЕЗКА, ЛЕЖАЩЕГО ВДОЛЬ ВЫНОСА (между параллельными отрезками, от
+        // точки до отрезка): размерная линия, попавшая на сам отрезок, выносной не требует — отрезок и есть выносная; вышла за
+        // отрезок — выносная от БЛИЖНЕГО КОНЦА отрезка до размерной (с напуском), а не от середины через весь отрезок и не до
+        // середины соседнего. P3D_SKDIMEXTALONG=0 — прежние выносные от точки замера.
+        LastExtensions.Clear();
+        void Ext(Vector2d x, SkLine? l, Vector2d q)
+        {
+            if (l != null && l.B.P != l.A.P && Math.Abs(Vector2d.Dot((l.B.P - l.A.P).Normalized(), nrm)) > 0.999)
+            {
+                var ld = l.B.P - l.A.P; double t = Vector2d.Dot(q - l.A.P, ld) / ld.LengthSquared;
+                if (t >= -1e-9 && t <= 1 + 1e-9) return;           // размерная линия — на самом отрезке
+                var end = t < 0 ? l.A.P : l.B.P; var dq = q - end; double dl = dq.Length;
+                if (dl < 1e-12) return;
+                var to = q + dq / dl * (OverrunPx * px);
+                Line(batch, plane, style, end, to); LastExtensions.Add((end, to));
+                return;
+            }
+            Line(batch, plane, style, x + nrm * gap, x + nrm * over); LastExtensions.Add((x + nrm * gap, x + nrm * over));
+        }
+        Ext(a, la, a2);
+        Ext(b, lb, b2);
 
         // Стрелки внутри или снаружи. В режиме Auto они выносятся наружу,
         // когда между выносными линиями не помещаются ни две стрелки,

@@ -152,10 +152,16 @@ public static class SketchSuggest
     public static void DeleteDims(MainWindow w, List<SkDimension> ds)
     {
         var sk = w.ViewPort.ActiveSketch; if (sk == null || ds.Count == 0) return;
+        var weakBefore = ds.Where(d => d.IsDefault && !d.Locked).ToList();
         var (removed, weakened) = SketchEditing.DeleteDimensions(sk, ds.Where(d => !d.UserLocked), w.Session.Document.Solver);
         w.ViewPort.Selection.Clear();
         w.AfterSketchEdit(sk);
-        if (weakened > 0) w.ShowToast(L("Удалено размеров: {0}; нужных эскизу (стали слабыми): {1}", removed, weakened), error: false);
+        // k185 (замечание 09.11, 12:39, п. 3): серый (слабый) размер, который остался, — не отказ удалить, а подсказка: без него у
+        // его точек остаётся степень свободы. Сообщение называет размеры и что сделать.
+        var stayedWeak = weakBefore.Where(sk.Dimensions.Contains).ToList();
+        if (stayedWeak.Count > 0)
+            w.ShowToast(L("Серый размер {0} остаётся: без него у его точек есть степень свободы (эскиз не определён). Задайте свой размер, который их определяет (например, глубину или угол), — серый размер исчезнет сам.", string.Join(", ", stayedWeak.Select(d => d.Name))), error: false);
+        else if (weakened > 0) w.ShowToast(L("Удалено размеров: {0}; нужных эскизу (стали слабыми): {1}", removed, weakened), error: false);
         w.RefreshContext();
     }
 

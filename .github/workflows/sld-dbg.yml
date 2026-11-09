@@ -51,7 +51,7 @@ jobs:
           dotnet build tests/ui/UiChecks.csproj -c Release -o out/ui -v q --nologo > res/build.log 2>&1 || echo "build failed" >> res/build.log
           tail -30 res/build.log
           export DOTNET_TieredCompilation=0 P3D_USERMODELS="$PWD/tests/ui/data"
-          if [ -x out/ui/Parametric3D.UiChecks ]; then timeout 40m out/ui/Parametric3D.UiChecks "UI-SKETCH-IMAGE-K184|UI-SKETCH-K106|UI-IMPORT-INTO-K184|UI-IMPORT-STEP|UI-IMPORT-ASSEMBLY|UI-IMPORT-PART-SHOW|UI-STL-IMPORT-K119" > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err; fi
+          if [ -x out/ui/Parametric3D.UiChecks ]; then timeout 40m out/ui/Parametric3D.UiChecks "UI-SKETCH-DIMEXT-K185|UI-SKETCH-K123|UI-SKETCH-IMAGE-K184|UI-SKETCH-K106|UI-IMPORT-INTO-K184|UI-IMPORT-STEP|UI-IMPORT-ASSEMBLY|UI-IMPORT-PART-SHOW|UI-STL-IMPORT-K119" > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err; fi
       - name: Итог — в ветку ya1/res/k184_app
         if: always()
         run: |
@@ -66,7 +66,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: k185_d3, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=7254K613 P3D_SLDDIAG=1 P3D_SLDDIAGOBJ=res/out P3D_XTINTDBG=1' }
+          - { name: k185_d4, cmd: 'sldprt CORPUS', env: 'P3D_SLDNAME=93152A110,8294A14,7632K72 P3D_SLDDIAG=1' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

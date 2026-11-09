@@ -6602,6 +6602,46 @@ Check("UI-SKETCH-IMAGE-K184", () =>
     finally { foreach (var f in new[] { png, p3d }) if (File.Exists(f)) File.Delete(f); }
 });
 
+Check("UI-SKETCH-DIMEXT-K185", () =>
+{
+    // k185 (замечание 09.11, 12:39, пп. 1–2): размер между параллельными отрезками — размерная линия на обоих отрезках: выносных
+    // нет; выше обоих — выносные от верхних концов отрезков (не от середины и не до середины соседнего)
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s);
+    void Run() { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); }
+    w.SelectItem(part.PlaneXY); w.StartOperation(new SketchOp()); Run();
+    var vp = w.ViewPort; var sk = vp.ActiveSketch!;
+    vp.EnterSketch(sk, animate: false); Run();
+    var l1 = sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(0, 10)));
+    var l2 = sk.AddEntity(new SkLine(new SkPoint(20, -5), new SkPoint(20, 4)));
+    sk.Dimensions.RemoveAll(x => true);
+    var dd = sk.AddDimension(DimensionType.DistanceLineLine, 20, l1, l2);
+    dd.UserPlaced = true;
+    sk.Dimensions.RemoveAll(x => !ReferenceEquals(x, dd));
+    double[] Ys() { var r = new List<double>(); foreach (var e in SketchDimensions.LastExtensions) r.Add(e.A.Y); return r.ToArray(); }
+    // размерная линия на высоте 2 (внутри обоих отрезков)
+    for (int pass = 0; pass < 2; pass++)
+    {
+        SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+        var a2 = dd.TextCenter;
+        Console.WriteLine($"  pass {pass}: text at ({a2.X:0.##},{a2.Y:0.##}), extensions {string.Join("; ", SketchDimensions.LastExtensions.Select(e => $"({e.A.X:0.#},{e.A.Y:0.#})-({e.B.X:0.#},{e.B.Y:0.#})"))}");
+        if (pass == 0)
+        {
+            // сдвиг подписи так, чтобы размерная линия была на y = 2
+            dd.TextOffset += new Vector2d(0, 2 - a2.Y);
+        }
+    }
+    Require(SketchDimensions.LastExtensions.Count == 0, "extension lines drawn though the dimension line lies on both segments");
+    // выше обоих отрезков: y = 30
+    dd.TextOffset += new Vector2d(0, 28);
+    SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
+    var ex = SketchDimensions.LastExtensions.ToList();
+    Console.WriteLine($"  above: extensions {string.Join("; ", ex.Select(e => $"({e.A.X:0.#},{e.A.Y:0.#})-({e.B.X:0.#},{e.B.Y:0.#})"))}");
+    Require(ex.Count == 2 && ex.Any(e => (e.A - l1.B.P).Length < 1e-9) && ex.Any(e => (e.A - l2.B.P).Length < 1e-9), "extension lines do not start at the upper segment ends");
+    Require(ex.All(e => e.B.Y > 29), "extension lines do not reach the dimension line");
+    w.FinishSketch(); Run();
+});
+
 Check("UI-SKETCH-K106", () =>
 {
     // k106 (снимок 13:13): вершина открытого конца — поверх красного квадрата (2); совпадение концов дуг, уже касающихся,
