@@ -128,8 +128,9 @@ internal abstract class XtSurf
         /// <summary>k185: разбор — центр у точки, его отстояние от опор против радиусов, отход касания.</summary>
         public string Diag(Vector3d q)
         {
-            var c = B.CentreAt(q); var p0 = B.S0.Project(c); var p1 = B.S1.Project(c); var mine = Idx == 0 ? p0 : p1;
-            return $"centre {c} d0 {(c - p0).Length * 1000:G4} mm (R0 {B.R0 * 1000:G4}) d1 {(c - p1).Length * 1000:G4} mm (R1 {B.R1 * 1000:G4}) contact off {(mine - q).Length * 1000:G4} mm, q-centre {(q - c).Length * 1000:G4} mm";
+            var c = B.CentreAt(q); var p0 = B.S0.Project(c); var p1 = B.S1.Project(c); var mine = Contacts(q).Mine;
+            var sp = B.Spine; double ds = double.MaxValue; foreach (var x in sp) ds = Math.Min(ds, (x - c).Length);
+            return $"centre {c} d0 {(c - p0).Length * 1000:G4} mm (R0 {B.R0 * 1000:G4}) d1 {(c - p1).Length * 1000:G4} mm (R1 {B.R1 * 1000:G4}) contact off {(mine - q).Length * 1000:G4} mm, q-centre {(q - c).Length * 1000:G4} mm, spine pts {sp.Count} nearest {ds * 1000:G4} mm";
         }
     }
     sealed class Off : XtSurf
