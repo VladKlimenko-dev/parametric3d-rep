@@ -6892,6 +6892,7 @@ Check("UI-SKETCH-PLANE-K185", () =>
         Require(w.InSketch, "a plane selected in the view did not start the sketch");
         w.CancelSketch(); Run();
         vp.Selection.Clear(); Run();
+        Console.WriteLine($"  after cancel: same part {ReferenceEquals(s.Part, part)}, view doc same {ReferenceEquals(vp.Document, s.Document)}, active sketch {vp.ActiveSketch?.Name}, in sketch {w.InSketch}, op {w.CurrentOperation?.GetType().Name}, planes shown {vp.Show.Planes}, pick {vp.PickForTest(sp.Value).Kind}");
         vp.Camera.State.Rotation = Parametric3D.Render.Camera.OrientationQuat(Parametric3D.Render.ViewOrientation.Front); vp.ZoomToFit(animate: false); Run();
         sp = vp.Project(cw); Require(sp != null, "plane point is off the view after the sketch");
         w.StartOperation(new SketchOp()); Run();
@@ -6943,6 +6944,28 @@ Check("UI-SKETCH-PLANE-K185", () =>
         w.CancelOperation(); Run();
     }
     finally { if (Loc.En) w.ToggleLanguage(); w.Close(); }
+});
+
+Check("UI-SKETCH-PLANE-PANEL-K185", () =>
+{
+    // а6: панель «Эскиз» открыта без выбора — щелчок по плоскости в виде начинает эскиз (новое окно, без прежних эскизов)
+    var s = DocumentSession.NewPart(); var part = s.Part!;
+    var w = Open(s); var vp = w.ViewPort;
+    void Run() { for (int i = 0; i < 3; i++) { Dispatcher.UIThread.RunJobs(); w.UpdateLayout(); } }
+    try
+    {
+        vp.Camera.State.Rotation = Parametric3D.Render.Camera.OrientationQuat(Parametric3D.Render.ViewOrientation.Front); vp.ZoomToFit(animate: false); Run();
+        var cs = part.PlaneXY.DisplayCorners();
+        var cw = new Vector3d(cs[0].X * 0.25 + cs[2].X * 0.75, cs[0].Y * 0.25 + cs[2].Y * 0.75, cs[0].Z * 0.25 + cs[2].Z * 0.75);
+        var sp = vp.Project(cw)!.Value;
+        Console.WriteLine($"  before: pick {vp.PickForTest(sp).Kind}");
+        w.StartOperation(new SketchOp()); Run();
+        Console.WriteLine($"  panel open: op {w.CurrentOperation?.GetType().Name}, filter {vp.Selection.Filter}, pick {vp.PickForTest(sp).Kind}, planes shown {vp.Show.Planes}");
+        vp.SimulatePick(sp.X / vp.Bounds.Width, sp.Y / vp.Bounds.Height, select: true); Run(); Run();
+        Console.WriteLine($"  after click: in sketch {w.InSketch}");
+        Require(w.InSketch, "a plane clicked in the view does not fill the sketch panel (fresh window)");
+    }
+    finally { w.Close(); }
 });
 
 Check("UI-SKETCH-DIMEXT-K185", () =>
