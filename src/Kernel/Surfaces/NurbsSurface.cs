@@ -919,7 +919,7 @@ public sealed class NurbsSurface : ISurface3
                         var pa = PointAt(ua); var pb = PointAt(ub);
                         if ((PointAt((ua + ub) / 2) - (pa + pb) / 2).Length > Math.Max(Tol.Chord, 1e-4)) need = true;
                     }
-                if (!need) break;
+                if (!need || T.Count / 3 * 4 > 40000) break;   // не больше 40 000 треугольников на грань
                 var mid = new Dictionary<(int, int), int>();
                 int Mid(int x, int y)
                 {
