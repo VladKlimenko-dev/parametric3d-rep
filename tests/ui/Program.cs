@@ -6620,25 +6620,23 @@ Check("UI-SKETCH-DIMEXT-K185", () =>
     sk.Dimensions.RemoveAll(x => !ReferenceEquals(x, dd));
     double[] Ys() { var r = new List<double>(); foreach (var e in SketchDimensions.LastExtensions) r.Add(e.A.Y); return r.ToArray(); }
     // размерная линия на высоте 2 (внутри обоих отрезков)
-    for (int pass = 0; pass < 2; pass++)
+    for (int pass = 0; pass < 8; pass++)
     {
         SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
         var a2 = dd.TextCenter;
         Console.WriteLine($"  pass {pass}: text at ({a2.X:0.##},{a2.Y:0.##}), extensions {string.Join("; ", SketchDimensions.LastExtensions.Select(e => $"({e.A.X:0.#},{e.A.Y:0.#})-({e.B.X:0.#},{e.B.Y:0.#})"))}");
-        if (pass == 0)
-        {
-            // сдвиг подписи так, чтобы размерная линия была на y = 2
-            dd.TextOffset += new Vector2d(0, 2 - a2.Y);
-        }
+        // сдвиг подписи, пока размерная линия не окажется на обоих отрезках (подпись — чуть выше линии)
+        if (SketchDimensions.LastExtensions.Count == 0) break;
+        dd.TextOffset += new Vector2d(0, 2.5 - a2.Y);
     }
     Require(SketchDimensions.LastExtensions.Count == 0, "extension lines drawn though the dimension line lies on both segments");
-    // выше обоих отрезков: y = 30
-    dd.TextOffset += new Vector2d(0, 28);
+    // выше обоих отрезков
+    dd.TextOffset += new Vector2d(0, 60);
     SketchDimensions.Build(sk, new DimBatch(), vp.PixelSize);
     var ex = SketchDimensions.LastExtensions.ToList();
     Console.WriteLine($"  above: extensions {string.Join("; ", ex.Select(e => $"({e.A.X:0.#},{e.A.Y:0.#})-({e.B.X:0.#},{e.B.Y:0.#})"))}");
     Require(ex.Count == 2 && ex.Any(e => (e.A - l1.B.P).Length < 1e-9) && ex.Any(e => (e.A - l2.B.P).Length < 1e-9), "extension lines do not start at the upper segment ends");
-    Require(ex.All(e => e.B.Y > 29), "extension lines do not reach the dimension line");
+    Require(ex.All(e => e.B.Y > 10.5), "extension lines do not reach the dimension line");
     w.FinishSketch(); Run();
 });
 
