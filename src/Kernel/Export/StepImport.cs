@@ -791,15 +791,18 @@ public static class StepImport
                 }
             }
             catch (Exception ex) when (!KernelContext.IsCancellation(ex)) { break; }
+            if (ExtDbg) Console.Error.WriteLine($"NURBSEXT {f.Tag} pass {pass} need {need} u [{lu:G4}, {hu:G4}] v [{lv:G4}, {hv:G4}] closedU {ns.ClosedU}");
             if (!need) break;
             if (ns.ClosedU && (lu < 0 || hu > 1)) break;
             double M(double x) => x * 1.1;   // запас 10 % от вылета
             double u0 = lu < 0 ? M(lu) : 0, u1 = hu > 1 ? 1 + M(hu - 1) : 1, v0 = lv < 0 ? M(lv) : 0, v1 = hv > 1 ? 1 + M(hv - 1) : 1;
             if (u0 < -0.1 || u1 > 1.1 || v0 < -0.1 || v1 > 1.1) break;
-            if (ns.Extended(u0, u1, v0, v1) is { } ext) { f.Surface = ext; Interlocked.Increment(ref NurbsExtended); } else break;
+            if (ns.Extended(u0, u1, v0, v1) is { } ext) { f.Surface = ext; Interlocked.Increment(ref NurbsExtended); if (ExtDbg) Console.Error.WriteLine($"NURBSEXT   extended to u [{u0:G4}, {u1:G4}] v [{v0:G4}, {v1:G4}]"); }
+            else { if (ExtDbg) Console.Error.WriteLine("NURBSEXT   Extended returned null"); break; }
         }
     }
     static readonly bool NurbsExtendOff = Environment.GetEnvironmentVariable("P3D_NURBSEXTEND") == "0";
+    static readonly bool ExtDbg = Environment.GetEnvironmentVariable("P3D_EXTDBG") == "1";
     /// <summary>k185: граней, чья B-поверхность продлена до рёбер (разбор).</summary>
     public static long NurbsExtended;
     static readonly bool LoopMeshParallel = Environment.GetEnvironmentVariable("P3D_LOOPMESHPAR") != "0";
