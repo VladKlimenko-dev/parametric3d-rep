@@ -968,6 +968,7 @@ internal sealed class XtBlendSurf : XtSurf
     public double R0, R1;
     public bool Rev;
 
+    static readonly bool BlendFieldsDbg = Environment.GetEnvironmentVariable("P3D_XTBLENDF") == "1";
     public static XtBlendSurf? Of(XtFile f, XtNode n, int depth)
     {
         if (depth > 3) return null;
@@ -977,6 +978,7 @@ internal sealed class XtBlendSurf : XtSurf
         XtSurf? s1 = b.Name == "BLENDED_EDGE" ? Of(f, b, depth + 1) : XtSurf.Of(f, b);
         if (s0 == null || s1 == null) return null;
         var rg = n.DA("range");
+        if (BlendFieldsDbg) Console.Error.WriteLine($"XTBLENDF {n.Id} type {n.C("blend_type")} range [{string.Join(",", rg)}] thumb [{string.Join(",", n.DA("thumbweight"))}] spine {sp.Name} s0 {a.Name} s1 {b.Name} fields {string.Join(" ", n.F.Select(kv => kv.Key + "=" + (kv.Value is double[] da ? "[" + string.Join(",", da) + "]" : kv.Value?.ToString())))}");
         var bl = new XtBlendSurf { S0 = s0, S1 = s1, R0 = rg.Length > 0 ? Math.Abs(rg[0]) : 0, R1 = rg.Length > 1 ? Math.Abs(rg[1]) : 0, Rev = sp.C("sense") == '-' };
         List<Vector3d> raw;
         switch (sp.Name)
