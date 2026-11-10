@@ -1,0 +1,457 @@
+{"runtime":".NET 8.0.33","cpu":4,"os":"Ubuntu 26.04.1 LTS","args":["globals"]}
+Core.AppLog.MaxBytes
+Core.AppLog.Path
+Core.Ids._next
+Core.Settings.Current
+Core.Settings.DisplayUnitMm
+Core.Settings.DisplayUnitSuffix
+Kernel.Analytic.AnalyticFace.BoundsIndexes
+Kernel.Analytic.AnalyticFace.BoundsMismatches
+Kernel.Analytic.AnalyticFace.PoleClampHits
+Kernel.Analytic.Classifier.ClsBoxSkips
+Kernel.Analytic.Classifier.FacesBuilt
+Kernel.Analytic.FaceIntersect.CertOutsideBox
+Kernel.Analytic.FaceIntersect.EventCertFailures
+Kernel.Analytic.FaceIntersect.EventClips
+Kernel.Analytic.FaceIntersect.EventMemoHits
+Kernel.Analytic.FaceIntersect.OnEdgePieces
+Kernel.Analytic.FaceIntersect.RefineFails
+Kernel.Analytic.FaceIntersect.TangentFar
+Kernel.Analytic.FaceIntersect.TouchBridges
+Kernel.Analytic.FaceIntersect.TouchSplits
+Kernel.Analytic.FaceIntersect.TraceBallsTight
+Kernel.Analytic.FaceIntersect.UnresolvedClips
+Kernel.Analytic.FaceSplit.ClosestMemoHits
+Kernel.Analytic.FaceSplit.ClosestMismatches
+Kernel.Analytic.FaceSplit.CutFar
+Kernel.Analytic.FaceSplit.CutsSkippedByBox
+Kernel.Analytic.FaceSplit.DupPiecesDropped
+Kernel.Analytic.FaceSplit.GridRegions
+Kernel.Analytic.FaceSplit.NodeMergedFar
+Kernel.Analytic.FaceSplit.SplitGridMismatches
+Kernel.Analytic.FaceSplit.StraightDarts
+Kernel.Analytic.GeneralBoolean.BndEventEdges
+Kernel.Analytic.GeneralBoolean.BndSampledEdges
+Kernel.Analytic.GeneralBoolean.BndSamplesSkipped
+Kernel.Analytic.GeneralBoolean.BuildMerges
+Kernel.Analytic.GeneralBoolean.BuildSplits
+Kernel.Analytic.GeneralBoolean.CircleTouches
+Kernel.Analytic.GeneralBoolean.DuplicatePieces
+Kernel.Analytic.GeneralBoolean.LateSew
+Kernel.Analytic.GeneralBoolean.MergeTagFromA
+Kernel.Analytic.GeneralBoolean.MergesRefused
+Kernel.Analytic.GeneralBoolean.OpenLoopsMerged
+Kernel.Analytic.GeneralBoolean.PairsMaxConcurrent
+Kernel.Analytic.GeneralBoolean.PartChecksDeferred
+Kernel.Analytic.GeneralBoolean.PointTouches
+Kernel.Analytic.GeneralBoolean.PrepParallelRuns
+Kernel.Analytic.GeneralBoolean.SelectParallelRuns
+Kernel.Analytic.GeneralBoolean.SewMerges
+Kernel.Analytic.GeneralBoolean.SewSplits
+Kernel.Analytic.GeneralBoolean.SideDropped
+Kernel.Analytic.GeneralBoolean.SideShifted
+Kernel.Analytic.GeneralBoolean.SideUndecided
+Kernel.Analytic.GeneralBoolean.SphereChartsChanged
+Kernel.Analytic.GeneralBoolean.TangentEdgeCuts
+Kernel.Analytic.GeneralBoolean.TangentMissFaces
+Kernel.Analytic.GeneralBoolean.TangentOnBothEdges
+Kernel.Analytic.GeneralBoolean.UnifyChecks
+Kernel.Analytic.GeneralBoolean.VertexMergedByDistance
+Kernel.Analytic.GeneralBoolean.VertexMergedFar
+Kernel.Analytic.RigorousEvents.Certified
+Kernel.Analytic.RigorousEvents.Uncertain
+Kernel.Analytic.SsiEvents.AlgebraicEdges
+Kernel.Analytic.SsiEvents.CoincidentEdges
+Kernel.Analytic.SsiEvents.EndSnaps
+Kernel.Analytic.SsiEvents.NearTangentMerges
+Kernel.Analytic.SsiEvents.SampledEdges
+Kernel.Analytic.SsiEvents.TangentEvents
+Kernel.Analytic.SsiEvents.TracedCertified
+Kernel.Analytic.SsiEvents.TracedEndExempt
+Kernel.Analytic.SsiEvents.TracedUncertain
+Kernel.Curves.IntersectionCurve3.ShapeProjections
+Kernel.Diagnostics.Overhead._ticks
+Kernel.Diagnostics.Prof.Enabled
+Kernel.Exact.ExactAdapter.ApproxVolumes
+Kernel.Exact.ExactAdapter.CsgMemoHits
+Kernel.Exact.ExactAdapter.FormCacheHits
+Kernel.Exact.ExactAdapter.StaleExactUses
+Kernel.Exact.ExactBsp.BoxHits
+Kernel.Exact.ExactBsp.BoxMiss
+Kernel.Exact.ExactBsp.BuildNodes
+Kernel.Exact.ExactBsp.BuildSplitTicks
+Kernel.Exact.ExactBsp.ChooseTicks
+Kernel.Exact.ExactBsp.ClipNodes
+Kernel.Exact.ExactBsp.ClipSplitTicks
+Kernel.Exact.ExactBsp.Cuts
+Kernel.Exact.ExactBsp.InfiniteVertices
+Kernel.Exact.ExactBsp.LazyCapsOff
+Kernel.Exact.ExactBsp.LazyCapsRuns
+Kernel.Exact.ExactBsp.MaxDepth
+Kernel.Exact.ExactBsp.Splits
+Kernel.Exact.ExactSolid.VolumeMemoHits
+Kernel.Exact.PlaneRegistry.TotalShortcut
+Kernel.Exact.PlaneRegistry.TotalTier1
+Kernel.Exact.PlaneRegistry.TotalTier2
+Kernel.Exact.PlaneRegistry.TotalTier3
+Kernel.Export.ImportProgress.Active
+Kernel.Export.ImportProgress._facesDone
+Kernel.Export.ImportProgress._facesTotal
+Kernel.Export.ImportProgress._stage
+Kernel.Export.ImportProgress._totalFixed
+Kernel.Export.ImportProgress._value
+Kernel.Export.StepImport.DonorEdgeMismatch
+Kernel.Export.StepImport.LazyFaces
+Kernel.Export.StepImport.LazyFills
+Kernel.Export.StepImport.LoopMeshParallelRuns
+Kernel.Export.StepImport.NurbsExtended
+Kernel.Geometry.NurbsSsi.CoincidentSides
+Kernel.Geometry.SplineWallEdges.CurvesReplaced
+Kernel.Geometry.SplineWallEdges.VerticesSnapped
+Kernel.Geometry.Ssi.ConeCertsTight
+Kernel.Geometry.Ssi.CylTouchSplits
+Kernel.Geometry.Ssi.EqualCylOffForTest
+Kernel.Geometry.Ssi.EqualCylSplits
+Kernel.Geometry.Ssi.FootCanonMiss
+Kernel.Geometry.Ssi.FootCreaseHits
+Kernel.Geometry.Ssi.ParamFootCalls
+Kernel.Geometry.Ssi.ParamFootFar
+Kernel.Geometry.Ssi.ParamFootGlobal
+Kernel.Geometry.Ssi.PlaneTorusTangents
+Kernel.Geometry.Ssi.TraceBranchesAdded
+Kernel.Geometry.Ssi.TraceChordHalvings
+Kernel.Geometry.Ssi.TraceNearTangent
+Kernel.Geometry.Ssi.TraceUncertified
+Kernel.KernelContext._verifying
+Kernel.Ops.BooleanOp.AnalyticOnlySkips
+Kernel.Ops.BooleanOp.ArcsOffSurface
+Kernel.Ops.BooleanOp.ChainPolylines
+Kernel.Ops.BooleanOp.CsgParallelBatches
+Kernel.Ops.BooleanOp.DonorHits
+Kernel.Ops.BooleanOp.IslandFacesAbsorbed
+Kernel.Ops.BooleanOp.IslandsMerged
+Kernel.Ops.BooleanOp.LinesFaceted
+Kernel.Ops.BooleanOp.LoopsSpliced
+Kernel.Ops.BooleanOp.MeshEarlyAborts
+Kernel.Ops.BooleanOp.MeshFaceFailures
+Kernel.Ops.BooleanOp.NearTanRetries
+Kernel.Ops.BooleanOp.PolyFanFixes
+Kernel.Ops.BooleanOp.PreviewMeshBooleans
+Kernel.Ops.BooleanOp.PrismChecksDeferred
+Kernel.Ops.BooleanOp.SlitLoops
+Kernel.Ops.BooleanOp.SliverPiecesMerged
+Kernel.Ops.BooleanOp.ZeroAfterHeal
+Kernel.Ops.BooleanOp._keptInvalid
+Kernel.Ops.DirectRound.AsymJunctions
+Kernel.Ops.DirectRound.Built
+Kernel.Ops.DirectRound.CavityDetours
+Kernel.Ops.DirectRound.ChamferSwitches
+Kernel.Ops.DirectRound.CreaseFallbacks
+Kernel.Ops.DirectRound.CreaseSwitches
+Kernel.Ops.DirectRound.CurvedChamfers
+Kernel.Ops.DirectRound.CuspEnds
+Kernel.Ops.DirectRound.Declined
+Kernel.Ops.DirectRound.DraftSplineWalls
+Kernel.Ops.DirectRound.DraftTangents
+Kernel.Ops.DirectRound.EndFineHits
+Kernel.Ops.DirectRound.EndHoleHits
+Kernel.Ops.DirectRound.EndOvers
+Kernel.Ops.DirectRound.EndRootEvals
+Kernel.Ops.DirectRound.EqualCylBands
+Kernel.Ops.DirectRound.ExactSweeps
+Kernel.Ops.DirectRound.Exceptions
+Kernel.Ops.DirectRound.ExtendedThroughOpen
+Kernel.Ops.DirectRound.FitEvals
+Kernel.Ops.DirectRound.FitParallelRuns
+Kernel.Ops.DirectRound.GuideAllSynth
+Kernel.Ops.DirectRound.GuidedLofts
+Kernel.Ops.DirectRound.HollowLofts
+Kernel.Ops.DirectRound.HollowRejected
+Kernel.Ops.DirectRound.JointThroughVHits
+Kernel.Ops.DirectRound.JointsBuilt
+Kernel.Ops.DirectRound.LawCreases
+Kernel.Ops.DirectRound.LawLoops
+Kernel.Ops.DirectRound.LawLunes
+Kernel.Ops.DirectRound.LawMitres
+Kernel.Ops.DirectRound.LawOpenChains
+Kernel.Ops.DirectRound.LineCylChamfers
+Kernel.Ops.DirectRound.LoftPlanarSides
+Kernel.Ops.DirectRound.MixedCorners
+Kernel.Ops.DirectRound.MultiEnds
+Kernel.Ops.DirectRound.NCorners
+Kernel.Ops.DirectRound.NurbsFacesExtended
+Kernel.Ops.DirectRound.NurbsLofts
+Kernel.Ops.DirectRound.OffsetSharpened
+Kernel.Ops.DirectRound.OffsetSlides
+Kernel.Ops.DirectRound.OffsetSolids
+Kernel.Ops.DirectRound.OpenBuilt
+Kernel.Ops.DirectRound.OpenDeclined
+Kernel.Ops.DirectRound.OpenEndPoints
+Kernel.Ops.DirectRound.OpenEndSections
+Kernel.Ops.DirectRound.OpenParallelRuns
+Kernel.Ops.DirectRound.OpenTanPropagations
+Kernel.Ops.DirectRound.PartialVertexBuilt
+Kernel.Ops.DirectRound.PoleArcBands
+Kernel.Ops.DirectRound.RangeFits
+Kernel.Ops.DirectRound.RimSeeded
+Kernel.Ops.DirectRound.RoundSwitches
+Kernel.Ops.DirectRound.SeamToVertexHits
+Kernel.Ops.DirectRound.SecBreaks
+Kernel.Ops.DirectRound.SectionFacesExtended
+Kernel.Ops.DirectRound.SetbackCorners
+Kernel.Ops.DirectRound.ShellOpenLips
+Kernel.Ops.DirectRound.SimGuideLofts
+Kernel.Ops.DirectRound.SolidTrisMemoHits
+Kernel.Ops.DirectRound.StarContFallbacks
+Kernel.Ops.DirectRound.StraightExtends
+Kernel.Ops.DirectRound.TabRefines
+Kernel.Ops.DirectRound.TanOpenChains
+Kernel.Ops.DirectRound.TanPropagations
+Kernel.Ops.DirectRound.TanRetried
+Kernel.Ops.DirectRound.TiltedLoops
+Kernel.Ops.DirectRound.TolerantEdges
+Kernel.Ops.DirectRound.TwoEnds
+Kernel.Ops.DirectRound.VertexBuilt
+Kernel.Ops.DirectRound.VertexDeclined
+Kernel.Ops.DraftOp.PickFacesSkipped
+Kernel.Ops.FilletOp.ArcBallTrims
+Kernel.Ops.FilletOp.BallExtended
+Kernel.Ops.FilletOp.BallFlatFallbacks
+Kernel.Ops.FilletOp.BlendRunouts
+Kernel.Ops.FilletOp.CapSphereParallel
+Kernel.Ops.FilletOp.CapSpherePreviews
+Kernel.Ops.FilletOp.CapSphereRoundOff
+Kernel.Ops.FilletOp.CapSphereRounds
+Kernel.Ops.FilletOp.CarrierChecksSkipped
+Kernel.Ops.FilletOp.ChamferOverflows
+Kernel.Ops.FilletOp.CrumbsDropped
+Kernel.Ops.FilletOp.EndTrims
+Kernel.Ops.FilletOp.FillerPiecesDropped
+Kernel.Ops.FilletOp.FinalCheckRefusals
+Kernel.Ops.FilletOp.LineStations
+Kernel.Ops.FilletOp.PreviewCsgCuts
+Kernel.Ops.FilletOp.RailBackRefusals
+Kernel.Ops.FilletOp.ReachCulls
+Kernel.Ops.FilletOp.ReachTrisHits
+Kernel.Ops.FilletOp.RebuildRoundOff
+Kernel.Ops.FilletOp.RebuildRounds
+Kernel.Ops.FilletOp.ReorderTries
+Kernel.Ops.FilletOp.ReorderWins
+Kernel.Ops.FilletOp.SmoothSkipped
+Kernel.Ops.FilletOp.SphereArcFillers
+Kernel.Ops.FilletOp.SweptFills
+Kernel.Ops.FilletOp.WallCaps
+Kernel.Ops.InstantPreview.Declines
+Kernel.Ops.InstantPreview.Hits
+Kernel.Ops.MeshCut.BspMemoHits
+Kernel.Ops.MeshCut.OpenRejected
+Kernel.Ops.MeshCut.PieceProbes
+Kernel.Ops.MeshCut.RegionProbes
+Kernel.Ops.NurbsProxy.Proxied
+Kernel.Ops.NurbsProxy.Restored
+Kernel.Ops.QuadricCut.LocalOffForTests
+Kernel.Ops.RevolveOp.HintsSet
+Kernel.Ops.ShellOp.FillerClips
+Kernel.Ops.ShellOp.OpenAtBlendShells
+Kernel.Ops.ShellOp.TangentEndsKept
+Kernel.Ops.TransformOp.ExactCopies
+Kernel.Ops.VertexOpCurved.Built
+Kernel.Ops.VertexSnap.Moved
+Kernel.Ops.VertexSnap.WorstShift
+Kernel.Query.PreparedBody.Builds
+Kernel.Query.PreparedBody.PrunedFaces
+Kernel.Surfaces.CornerPatchSurface._ids
+Kernel.Surfaces.NurbsSurface.FallbackRefines
+Kernel.Surfaces.NurbsSurface.FullDomainRefused
+Kernel.Surfaces.NurbsSurface.MultiStartWins
+Kernel.Surfaces.NurbsSurface.ProjNewtonHits
+Kernel.Surfaces.SectionSurface.NodeNanFixes
+Kernel.Surfaces.SectionSurface.ParallelTables
+Kernel.Surfaces.SectionSurface.TableSections
+Kernel.Tess.AnalysisMesher.Rounds
+Kernel.Tess.Cdt.BoxOffForTests
+Kernel.Tess.Cdt.LoopWalks
+Kernel.Tess.Cdt.Merged
+Kernel.Tess.ExactFaceMesher.AnisoCylFaces
+Kernel.Tess.ExactFaceMesher.BoundaryInsSkipped
+Kernel.Tess.ExactFaceMesher.CapByLoopPicks
+Kernel.Tess.ExactFaceMesher.CapLoopUndecided
+Kernel.Tess.ExactFaceMesher.CapsFixed
+Kernel.Tess.ExactFaceMesher.ChordAdj
+Kernel.Tess.ExactFaceMesher.ChordHavePos
+Kernel.Tess.ExactFaceMesher.ChordNoPos
+Kernel.Tess.ExactFaceMesher.ChordOtherLoop
+Kernel.Tess.ExactFaceMesher.ChordSeen
+Kernel.Tess.ExactFaceMesher.ChordSplit
+Kernel.Tess.ExactFaceMesher.ChordStep
+Kernel.Tess.ExactFaceMesher.ConformalFailed
+Kernel.Tess.ExactFaceMesher.ConformalMeshed
+Kernel.Tess.ExactFaceMesher.CuspDensified
+Kernel.Tess.ExactFaceMesher.ExactAreaRejects
+Kernel.Tess.ExactFaceMesher.FaceMemoHits
+Kernel.Tess.ExactFaceMesher.FaceMemoResets
+Kernel.Tess.ExactFaceMesher.FoldRejected
+Kernel.Tess.ExactFaceMesher.FoldReserveUsed
+Kernel.Tess.ExactFaceMesher.ObjDumpPath
+Kernel.Tess.ExactFaceMesher.PinchFoldsDropped
+Kernel.Tess.ExactFaceMesher.PoleDeclined
+Kernel.Tess.ExactFaceMesher.RefineAdded
+Kernel.Tess.ExactFaceMesher.RefineBad
+Kernel.Tess.ExactFaceMesher.RefineEvals
+Kernel.Tess.ExactFaceMesher.RefinePasses
+Kernel.Tess.ExactFaceMesher.RejectedByArea
+Kernel.Tess.ExactFaceMesher.Reused
+Kernel.Tess.ExactFaceMesher.SideSplits
+Kernel.Tess.ExactFaceMesher.SkipLost
+Kernel.Tess.ExactFaceMesher.SkipMicro
+Kernel.Tess.ExactFaceMesher.SkipRecheck
+Kernel.Tess.ExactFaceMesher.SkipTiny
+Kernel.Tess.ExactFaceMesher.SplitCount
+Kernel.Tess.ExactFaceMesher.StrayDump
+Kernel.Tess.ExactFaceMesher.ThinEarsKept
+Kernel.Tess.ExactFaceMesher.TorusGrids
+Kernel.Tess.ExactFaceMesher.UVDumpPath
+Kernel.Tess.ExactFaceMesher.UvFailures
+Kernel.Tess.ExactFaceMesher._memoWeight
+Kernel.Tess.MeshBuilder.NeedleAxisFixes
+Kernel.Tess.MeshBuilder.NeedlePatches
+Kernel.Tess.Tessellator.Calls
+Kernel.Tess.Tessellator.PolyMeshMemoHits
+Kernel.Tess.Tessellator.PolyOrphanTags
+Kernel.Tess.Tessellator.Repeats
+Kernel.Tess.TetFlips.LastRefusal
+Kernel.Tess.TetMesher.LastCavityBroken
+Kernel.Tess.UvMesher.EdgeRefines
+Kernel.Tess.UvMesher.FullPeriodicFaces
+Kernel.Tess.UvMesher.PoleCutsMoved
+Kernel.Tess.UvMesher.PolePicksByLoop
+Kernel.Tess.UvMesher.PoleUndecided
+Kernel.Tess.UvMesher.StereoFaces
+Kernel.Tess.UvMesher.StripSeamMoves
+Kernel.Tess.UvMesher.StripSeamOffForTest
+Kernel.Tess.UvMesher.TorusRestFaces
+Kernel.Tess.UvMesher.TwoCurvStarts
+Kernel.Topology.AnalyticMeasure.FastPolyBounds
+Kernel.Topology.AnalyticVolume.ArcFormulaRejected
+Kernel.Topology.AnalyticVolume.AreasComputed
+Kernel.Topology.AnalyticVolume.BandChains
+Kernel.Topology.AnalyticVolume.BandParallelRuns
+Kernel.Topology.AnalyticVolume.BandPoints
+Kernel.Topology.AnalyticVolume.BandSlabs
+Kernel.Topology.AnalyticVolume.GeneralCutRefused
+Kernel.Topology.AnalyticVolume.NurbsExactQuads
+Kernel.Topology.AnalyticVolume.NurbsRectFaces
+Kernel.Topology.AnalyticVolume.OriginShift
+Kernel.Topology.AnalyticVolume.ParallelRuns
+Kernel.Topology.AnalyticVolume.PolyVolumeRejected
+Kernel.Topology.AnalyticVolume.SphereClosedRejected
+Kernel.Topology.AnalyticVolume.SphereClosedUsed
+Kernel.Topology.BrepFile.Read
+Kernel.Topology.BrepFile.Unsupported
+Kernel.Topology.BrepFile.Written
+Kernel.Topology.GeometryAudit.CacheHits
+Kernel.Topology.GeometryAudit.CacheMisses
+Kernel.Topology.GeometryAudit.ChordMemoHits
+Kernel.Topology.GeometryAudit.ParallelRuns
+Kernel.Topology.PCurves.Samplings
+Kernel.Topology.ShellComponents.TinyCavitiesDropped
+Kernel.Topology.SolidValidator.MeshValMemoHits
+Kernel.Topology.SolidValidator.ValidationCacheHits
+Kernel.Topology.SurfaceDomain.PoleInsideTests
+Kernel.Topology.TopologyConventions.RingPtsMemoHits
+Kernel.Topology.TopologyHeal.RemovedEdges
+Kernel.Topology.TopologyHeal.RemovedFaces
+Model.Document.ClosedBuildsCancelled
+Model.Document.RefinesApplied
+Model.Document.RefinesCancelled
+Model.Document.RefinesStarted
+Model.Document.StaleBuildsCancelled
+Model.Document.VerifiesCancelled
+Model.Document.VerifiesRejected
+Model.Document.VerifiesStarted
+Model.DocumentFile.BrepRejected
+Model.DocumentFile.DisplayRejected
+Model.DocumentFile.FacetedReloads
+Model.DocumentStorage.MaxBytes
+Model.Drawing.BomDocument.Built
+Model.Drawing.DrawingScene.ViewsProjected
+Model.Drawing.SectionCut.Built
+Model.Drawing.ViewProjection.VisibilityTests
+Model.FeatureHistory.EdgeMapMemoHits
+Model.FeatureHistory.HistLoopsFirstHits
+Model.FeatureHistory.HistRefHits
+Model.Features.ExtrudeFeature.ToolsReused
+Model.Features.Feature._keyCounter
+Model.Features.SketchEdgeRefs.Followed
+Model.ModelItem._seqCounter
+Model.Part.CurvesFollowed
+Model.Part.FastPreviewBodies
+Model.Part.FastPreviewMeshSkips
+Model.Part.InstantRollbacks
+Model.Part.LazyAreas
+Model.Part.PolyLazyMeshSkips
+Model.Part.RestoredCheckpoints
+Model.Part.RestoredParts
+Model.Part.StaleFacetRetries
+Model.Sketching.NumericSketchSolver.DragHalvings
+Model.Sketching.NumericSketchSolver.DragSolves
+Model.Sketching.NumericSketchSolver.DragSteps
+Model.Sketching.NumericSketchSolver.FixedResidualsDropped
+Model.Sketching.NumericSketchSolver.SparseSteps
+Model.Sketching.Sketch.FormulaBareInDocUnits
+Model.Sketching.Sketch.PolylinesReused
+Model.Sketching.SketchDiagnostics.Computed
+Model.Sketching.SketchDiagnostics.Reused
+Model.Sketching.SketchEditing.CollapseHeld
+Model.Sketching.SketchEditing.CollapseRejected
+Model.Sketching.SketchEditing.Diagnosed
+Model.Sketching.SketchEditing.FreeEdits
+Model.Sketching.SketchEditing.HeldAllWeakEdits
+Model.Sketching.SketchEditing.HeldWeakEdits
+Model.Sketching.SketchEditing.RejectedEdits
+static-readonly-collection Core.Units.Catalog : Dictionary`2
+static-readonly-collection Kernel.Analytic.FaceIntersect._evMemo : ConditionalWeakTable`2
+static-readonly-collection Kernel.Analytic.FaceSplit._closestMemo : ConditionalWeakTable`2
+static-readonly-collection Kernel.Diagnostics.Prof.Allocated : Dictionary`2
+static-readonly-collection Kernel.Diagnostics.Prof.Counts : Dictionary`2
+static-readonly-collection Kernel.Diagnostics.Prof.Totals : Dictionary`2
+static-readonly-collection Kernel.Exact.ExactAdapter._csgMemo : ConditionalWeakTable`2
+static-readonly-collection Kernel.Exact.ExactAdapter._formCache : ConditionalWeakTable`2
+static-readonly-collection Kernel.Export.Parasolid.XtSchema13006.Types : Dictionary`2
+static-readonly-collection Kernel.Export.Parasolid.XtSurf.cache : ConditionalWeakTable`2
+static-readonly-collection Kernel.Ops.BooleanOp.TagNames : ConcurrentDictionary`2
+static-readonly-collection Kernel.Ops.BooleanOp._previewMeshBodies : ConditionalWeakTable`2
+static-readonly-collection Kernel.Ops.DirectRound._solidTris : ConditionalWeakTable`2
+static-readonly-collection Kernel.Ops.FilletOp.PreClipped : ConditionalWeakTable`2
+static-readonly-collection Kernel.Ops.FilletOp.PreviewPolys : ConditionalWeakTable`2
+static-readonly-collection Kernel.Ops.FilletOp._reachTris : ConditionalWeakTable`2
+static-readonly-collection Kernel.Ops.InstantPreview._carriers : ConditionalWeakTable`2
+static-readonly-collection Kernel.Ops.InstantPreview._sources : ConditionalWeakTable`2
+static-readonly-collection Kernel.Query.PreparedBody._cache : ConditionalWeakTable`2
+static-readonly-collection Kernel.Tess.AnalysisMesher.FellBack : ConcurrentDictionary`2
+static-readonly-collection Kernel.Tess.ExactFaceMesher.Remembered : Dictionary`2
+static-readonly-collection Kernel.Tess.ExactFaceMesher._faceMemo : ConcurrentDictionary`2
+static-readonly-collection Kernel.Tess.Tessellator._polyMemo : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.AnalyticVolume.CornerMemo : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.AnalyticVolume._areaCache : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.AnalyticVolume._bandRange : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.AnalyticVolume._bandVBreaks : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.AnalyticVolume._gauss : ConcurrentDictionary`2
+static-readonly-collection Kernel.Topology.AnalyticVolume._normCache : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.AnalyticVolume._slabCache : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.AnalyticVolume._volCache : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.EdgeRef.HoleAliases : Dictionary`2
+static-readonly-collection Kernel.Topology.GeometryAudit._chord : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.GeometryAudit._chordContent : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.GeometryAudit._off : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.SolidValidator._meshValMemo : ConcurrentDictionary`2
+static-readonly-collection Kernel.Topology.SolidValidator._valCache : ConditionalWeakTable`2
+static-readonly-collection Kernel.Topology.TopologyConventions._curvePts : ConditionalWeakTable`2
+static-readonly-collection Model.Configurations.Base : ConditionalWeakTable`2
+static-readonly-collection Model.Drawing.ViewProjection.EdgeCache : ConditionalWeakTable`2
+static-readonly-collection Model.Drawing.ViewProjection.MeshCache : ConditionalWeakTable`2
+static-readonly-collection Model.FeatureHistory.EdgeInfoCache : ConditionalWeakTable`2
+static-readonly-collection Model.FeatureHistory.EdgeSigCache : ConditionalWeakTable`2
+static-readonly-collection Model.FeatureHistory.FaceSigCache : ConditionalWeakTable`2
+static-readonly-collection Model.FeatureHistory._edgeMaps : ConditionalWeakTable`2
+static-readonly-collection Model.Sketching.SketchDiagnostics._memo : ConditionalWeakTable`2
