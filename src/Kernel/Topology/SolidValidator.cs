@@ -788,6 +788,7 @@ public static class SolidValidator
         r.Metrics["brep.loopOrientationErrors"] = bad;
     }
     static readonly bool LoopExactOff = Environment.GetEnvironmentVariable("P3D_LOOPEXACT") == "0";
+    static readonly bool LoopSeamProbeOff = Environment.GetEnvironmentVariable("P3D_LOOPSEAMPROBE") == "0";
     // грани с фасетами — по точной поверхности-источнику; P3D_LOOPFACETED=0 — только по фасетам (как прежде)
     static readonly bool LoopFacetedOff = Environment.GetEnvironmentVariable("P3D_LOOPFACETED") == "0";
     static readonly bool LoopDbg = Environment.GetEnvironmentVariable("P3D_LOOPDBG") == "1";
@@ -808,6 +809,16 @@ public static class SolidValidator
             {
                 if (uses[ce.Edge] != 1) continue;
                 var c = ce.Edge.Curve; double t0 = c.T0, t1 = c.T1, tm = (t0 + t1) / 2, h = (t1 - t0) * 1e-4;
+                // k185i: СЕРЕДИНА РЕБРА НА ШВЕ РАЗВЁРТКИ (θ = 0) — проба в другой точке ребра: шаги влево и вправо от точки шва
+                // попадают по разные стороны развёртки (θ = −10⁻¹⁵ и +10⁻¹⁵), и принадлежность решалась неверно — у поперечного
+                // отверстия шейки (кривая пересечения начинается на шве) результат булевой отвергался «контуры против нормали»,
+                // и вырез оставался гранями-сетками. Мутация P3D_LOOPSEAMPROBE=0.
+                if (!LoopSeamProbeOff)
+                {
+                    double thm = af.Theta(af.ProjectTo(c.PointAt(tm)));
+                    double dSeam = Math.Min(Math.Abs(thm), Math.Abs(Math.PI - Math.Abs(thm)));   // θ из atan2: шов развёртки — у 0 или у ±π
+                    if (dSeam < 1e-7) tm = t0 + 0.37 * (t1 - t0);
+                }
                 var p = c.PointAt(tm); var tg = (c.PointAt(tm + h) - c.PointAt(tm - h)) * (ce.Reversed ? -1 : 1);
                 double len = (c.PointAt(t1) - c.PointAt(t0)).Length + (c.PointAt(tm) - c.PointAt(t0)).Length;
                 if (tg.LengthSquared < 1e-30 || len < 1e-6) continue;
