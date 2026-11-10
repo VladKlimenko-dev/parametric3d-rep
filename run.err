@@ -1,0 +1,2 @@
+exit 1
+seconds 10445 nproc 4 env P3D_SLDSHARD=c4 cmd sldprt corpus
