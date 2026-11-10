@@ -52,7 +52,7 @@ jobs:
           tail -30 res/build.log
           export DOTNET_TieredCompilation=0 P3D_USERMODELS="$PWD/tests/ui/data"
           if [ -x out/ui/Parametric3D.UiChecks ]; then timeout 170m out/ui/Parametric3D.UiChecks $(cat tests/ui/only.txt 2>/dev/null) > res/run.log 2> res/run.err || echo "exit $?" >> res/run.err; fi
-          for e in "P3D_ROUTETRACE=1 P3D_LOOPDBG=1"; do echo "== $e" >> res/mut.log; env $e out/ui/Parametric3D.UiChecks "UI-NECK-CUT-K185|UI-SLEEVE-PATTERN-K185" >> res/mut.log 2>&1 || true; done
+          for e in "P3D_ROUTETRACE=1 P3D_TANGENTDBG=1"; do echo "== $e" >> res/mut.log; env $e out/ui/Parametric3D.UiChecks "UI-NECK-CUT-K185|UI-SLEEVE-PATTERN-K185" >> res/mut.log 2>&1 || true; done
       - name: Итог — в ветку ya1/res/k184_app
         if: always()
         run: |

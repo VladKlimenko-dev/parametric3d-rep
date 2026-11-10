@@ -216,6 +216,9 @@ public static class GeneralBoolean
     public static long TangentMissFaces;
     /// <summary>Статистика: касание по ребру, общему для обеих граней (разреза не нужно).</summary>
     public static long TangentOnBothEdges;
+    static readonly bool TangentEdgeCutOff = Environment.GetEnvironmentVariable("P3D_TANGENTEDGECUT") == "0";
+    /// <summary>k185: касаний цилиндра и плоскости по ребру плоской грани, разрезанных по прямой касания (разбор).</summary>
+    public static long TangentEdgeCuts;
 
     static readonly bool EmptyOff = Environment.GetEnvironmentVariable("P3D_GENEMPTY") == "0";
     /// <summary>Последний вызов Run в этом потоке доказал пустой результат (null с этим признаком — не отказ).</summary>
@@ -428,6 +431,24 @@ public static class GeneralBoolean
                         var pcs = FaceIntersect.ClipCurve(tl0, x, y);
                         if (pcs.All(pc => !pc.Closed && (pc.P1 - pc.P0).Length <= minLen)) { Interlocked.Increment(ref TangentMissFaces); continue; }
                         if (onEdge && pcs.All(pc => OnBoundary(pc, x) && OnBoundary(pc, y))) { Interlocked.Increment(ref TangentOnBothEdges); continue; }
+                        // k185 (замечание 10.11, 12:04): КАСАНИЕ ЦИЛИНДРА И ПЛОСКОСТИ ПО РЕБРУ ПЛОСКОЙ ГРАНИ — скруглённый конец паза:
+                        // отверстие радиуса полуширины паза с центром на торце паза касается его стенок по их рёбрам с торцом
+                        // (втулка 100395799). Прямая касания — граница плоской грани и внутренняя линия цилиндрической: плоская не
+                        // делится, цилиндрическая делится по прямой (как касательный стык в Parasolid — гладкое ребро). Только
+                        // плоскость × цилиндр и только если каждый кусок прямой на границе плоской грани и не на границе
+                        // цилиндрической. Мутация P3D_TANGENTEDGECUT=0.
+                        if (!TangentEdgeCutOff && onEdge && (x.Cyl ^ y.Cyl) && !x.Cone && !y.Cone && !x.Sph && !y.Sph && !x.Tor && !y.Tor
+                            && !(x.Band || y.Band || x.Param || y.Param))
+                        {
+                            var pf = x.Cyl ? y : x; var cf = x.Cyl ? x : y;
+                            var real = pcs.Where(pc => pc.Closed || (pc.P1 - pc.P0).Length > minLen).ToList();
+                            if (real.Count > 0 && real.All(pc => OnBoundary(pc, pf) && !OnBoundary(pc, cf)))
+                            {
+                                foreach (var pc in real) (ReferenceEquals(cf, x) ? onA[x] : onB[y]).Add(pc);
+                                Interlocked.Increment(ref TangentEdgeCuts);
+                                continue;
+                            }
+                        }
                     }
                     string Kind(AnalyticFace q) => q.Sph ? "sphere" : q.Cone ? "cone" : q.Cyl ? "cylinder" : q.Tor ? "torus" : "plane";
                     why = onEdge ? "tangent surfaces along an edge (not yet supported)" : $"tangent contact inside both faces (not supported): {Kind(x)} × {Kind(y)}";

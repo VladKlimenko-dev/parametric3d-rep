@@ -197,11 +197,19 @@ public sealed class BuildContext
     public Sketch? FindSketch(uint id)
     {
         var sk = Part.FindById<Sketch>(id);
+        // k185 (замечание 10.11, 12:04): ПОВТОР ОПЕРАЦИИ МАССИВОМ — эскиз уже на своём месте (его поставила сама операция, по
+        // своей грани), повтор лишь переносит профиль. Прежде повтор искал грань-основу заново — после копии первого выреза
+        // имена граней менялись, и копия выреза по грани отказывала («основа больше не существует»: втулка 100395799).
+        // Мутация P3D_REPLAYKEEPSKETCH=0.
+        if (Replaying > 0 && !ReplayKeepSketchOff) return sk;
         // KRN-08: эскиз на грани переносится на текущую грань с его именем.
         if (sk != null) SketchFaceRef.Follow(sk, this);
         if (sk != null) SketchEdgeRefs.Follow(sk, this);
         return sk;
     }
+    /// <summary>k185: идёт повтор операций массивом (зеркалом) — эскизы не переставляются по граням.</summary>
+    public int Replaying;
+    static readonly bool ReplayKeepSketchOff = Environment.GetEnvironmentVariable("P3D_REPLAYKEEPSKETCH") == "0";
     public DatumPlane? FindPlane(uint id) => Part.FindById<DatumPlane>(id);
 }
 

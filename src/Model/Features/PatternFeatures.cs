@@ -197,11 +197,13 @@ internal static class FeatureReplay
             foreach (var f in src)
             {
                 KernelContext.Checkpoint("pattern.feature");
+                ctx.Replaying++;
                 try { f.ExecuteTransformed(ctx, x); }
                 catch (RebuildException ex)
                 {
                     throw new RebuildException(ex.Outcome, $"{what}: copy {k} of «{f.Name}» failed — {ex.Message}");
                 }
+                finally { ctx.Replaying--; }
             }
         }
         ctx.Warnings.Add($"{what}: {src.Count} operation(s) repeated {xs.Count} time(s).");
