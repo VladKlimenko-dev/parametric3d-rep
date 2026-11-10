@@ -773,6 +773,7 @@ internal static class XtPoly
         return (fa - p).Length < 1e-9 && (fb - p).Length < 1e-9 ? p : null;
     }
 
+    static readonly bool DenseFastOff = Environment.GetEnvironmentVariable("P3D_XTDENSEFAST") == "0";
     public static List<Vector3d> Densify(IReadOnlyList<Vector3d> chart, XtSurf? a, XtSurf? b, int per)
     {
         if (Diagnostics.Prof.Enabled) Diagnostics.Prof.Count($"XT: сгущение {a?.GetType().Name}×{b?.GetType().Name} точек", chart.Count);
@@ -789,8 +790,14 @@ internal static class XtPoly
                 if (t <= lastT || t >= 1 || off > 0.5 * Math.Sqrt(segL2)) return false;
                 lastT = t; return true;
             }
+            bool segFailed = false;
             for (int k = 1; k < per; k++)
             {
+                // k185i: ЗВЕНО, НА КОТОРОМ ТОЧКА НЕ СЕЛА НА ОБЕ ПОВЕРХНОСТИ, ДАЛЬШЕ НЕ СГУЩАЕТСЯ: соседние точки того же звена так же не
+                // садятся (касание скругления с опорой), а каждая стоила до 60 попеременных проекций на B-поверхность и ленту
+                // скругления — USB-переходник 8761K424: 4.6 млн полных проекций, 455 с на 104 ребра. Между точками карты остаётся
+                // сплайн по самой карте (как и прежде для несевших точек). Мутация P3D_XTDENSEFAST=0.
+                if (segFailed && !DenseFastOff) break;
                 var p = Vector3d.Lerp(chart[i], chart[i + 1], (double)k / per);
                 // край скругления: опора касается скругления — попеременная проекция на касающиеся поверхности не сходится;
                 // точка берётся касанием шара с опорой (центр — на обеих смещённых опорах)
@@ -816,7 +823,9 @@ internal static class XtPoly
                     // (сходится за несколько шагов). Прежде 60 шагов попеременной проекции на каждую такую точку: у штампа
                     // 2602A125 — 3.6 млн полных проекций на B-поверхность резьбы, 290 с. Мутация P3D_XTALTSHORT=0.
                     double prevStep = double.MaxValue; bool early = false; int it = 0;
-                    for (; it < 60; it++)
+                    // k185i: со скруглением (лента, граница) — не больше 20 попеременных шагов (каждый — поиск центра шара), дальше Ньютон
+                    int itMax = !DenseFastOff && (a is XtBlendSurf or XtSurf.BlendBound || b is XtBlendSurf or XtSurf.BlendBound) ? 20 : 60;
+                    for (; it < itMax; it++)
                     {
                         var q = b.Project(a.Project(p));
                         double step = (q - p).Length;
@@ -835,7 +844,7 @@ internal static class XtPoly
                     {
                         if (IntersectNewton(a, b, p) is { } xe) p = xe;
                         else
-                            for (it++; it < 60; it++)   // Ньютон не сошёлся — попеременная проекция до прежнего предела, затем как прежде
+                            for (it++; it < itMax; it++)   // Ньютон не сошёлся — попеременная проекция до прежнего предела, затем как прежде
                             {
                                 var q = b.Project(a.Project(p));
                                 bool done = (q - p).Length < 1e-11; p = q;
@@ -848,7 +857,7 @@ internal static class XtPoly
                     // цилиндра: попеременная проекция уходит к другому касанию), не ставится — между точками карты остаётся
                     // кубический сплайн по самой карте (её хордовая ошибка задана файлом). Прежде такие точки уводили ребро на
                     // 0.3–0.5 мм. Мутация P3D_XTDENSECHECK=0.
-                    if (!DenseCheckOff && ((a.Project(p) - p).Length > 1e-8 || (b.Project(p) - p).Length > 1e-8)) continue;
+                    if (!DenseCheckOff && ((a.Project(p) - p).Length > 1e-8 || (b.Project(p) - p).Length > 1e-8)) { segFailed = true; continue; }
                 }
                 // k184: ПОРЯДОК ВДОЛЬ ЗВЕНА КАРТЫ. Проекция на ленту скругления уводила соседние точки вперёд и назад: ломаная
                 // шла зигзагом, контур плоской грани пересекал себя, и грань не строилась (опора 60945K27). Точка должна идти

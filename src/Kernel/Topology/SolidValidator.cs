@@ -149,6 +149,7 @@ public static class SolidValidator
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, ValEntry> _valCache = new();
     static readonly bool ValKeyDisplayOff = Environment.GetEnvironmentVariable("P3D_VALKEYDISPLAY") == "0";
     internal static bool KeyDisplayOff => ValKeyDisplayOff;
+    static readonly bool PcSkipOff = Environment.GetEnvironmentVariable("P3D_PCSKIP") == "0";
     static readonly bool ValCacheDbg = Environment.GetEnvironmentVariable("P3D_VALCACHEDBG") == "1";
     static readonly bool ValCacheOff = Environment.GetEnvironmentVariable("P3D_VALCACHE") == "0";
     static readonly bool ValKeyGuarOff = Environment.GetEnvironmentVariable("P3D_VALKEYGUAR") == "0";
@@ -167,7 +168,10 @@ public static class SolidValidator
         string ok = $"{options.Closed}|{options.MaxListed}";
         if (options.CheckBRep) using (Diagnostics.Prof.Time("проверка: B-rep")) report.Merge(Section(solid, "brep|" + ok, () => ValidateBRep(solid, options)));
         if (options.CheckExact && solid.Exact != null) using (Diagnostics.Prof.Time("проверка: точное тело")) report.Merge(Section(solid, "exact|" + ok, () => ValidateExact(solid.Exact.Solid, options)));
-        if (options.CheckBRep && options.CheckPCurves) using (Diagnostics.Prof.Time("проверка: p-кривые")) report.Merge(Section(solid, "pc|" + ok, () => ValidatePCurves(solid, options)));
+        // k185i: p-кривые меряются только у точного тела: у неточного (импорт, грани с фасетами) отклонение ошибкой не считается, а
+        // замер — проекции точек рёбер на NURBS — стоил разъёму 6168T54 155 с из 166. Мутация P3D_PCSKIP=0 — меряются у всех.
+        bool pcExact = solid.Guarantee is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactQuadric;
+        if (options.CheckBRep && options.CheckPCurves && (pcExact || PcSkipOff)) using (Diagnostics.Prof.Time("проверка: p-кривые")) report.Merge(Section(solid, "pc|" + ok, () => ValidatePCurves(solid, options)));
         if (TorStat) TorusStat(solid);
         if (options.CheckMesh || options.CheckSelfIntersections)
         {

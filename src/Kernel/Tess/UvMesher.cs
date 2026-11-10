@@ -334,9 +334,13 @@ public static class UvMesher
             List<int> tr; List<Vector2d> uvs;
             // k185: большая область — сперва Делоне с ограничениями (ушная — O(n²)…O(n³): 6169K406, 437 с на 82 грани),
             // не вышло — ушная, как прежде. Мутация P3D_CDTBIG=0.
+            var swTri = System.Diagnostics.Stopwatch.StartNew(); string triHow = "ear";
             if (!ExactFaceMesher.CdtBigOff && poUv.Count + phUv.Sum(h => h.Count) >= ExactFaceMesher.CdtBigN
-                && Cdt.Triangulate(poUv, phUv, out var cdtPts) is { Count: > 0 } cdtTris) { tr = cdtTris; uvs = cdtPts; }
+                && Cdt.Triangulate(poUv, phUv, out var cdtPts) is { Count: > 0 } cdtTris) { tr = cdtTris; uvs = cdtPts; triHow = "cdt"; }
             else { tr = Triangulator.Triangulate(poUv, phUv, out var earPts); uvs = earPts; }
+            // k185i: долгая триангуляция области — в разбор (сколько точек, отверстий, каким способом)
+            if (Diagnostics.Prof.Enabled && swTri.Elapsed.TotalSeconds > 2)
+                Console.Error.WriteLine($"UVSLOW {s.GetType().Name} {swTri.Elapsed.TotalSeconds:0.0} s: outer {poUv.Count}, holes {phUv.Count} ({phUv.Sum(h => h.Count)} pts, max {(phUv.Count == 0 ? 0 : phUv.Max(h => h.Count))}), method {triHow}, tris {tr.Count}");
             if (tr.Count == 0) { why = "the parameter-space triangulation failed"; return null; }
             var map = uvs.Select(u => { var k = (u.X, u.Y); if (!index.TryGetValue(k, out int id)) { id = uvList.Count; uvList.Add(u); index[k] = id; } return id; }).ToList();
             tris.AddRange(tr.Select(i => map[i]));

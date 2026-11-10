@@ -3400,6 +3400,7 @@ public static partial class ExactFaceMesher
     static readonly bool RefineCacheOff = Environment.GetEnvironmentVariable("P3D_REFINECACHE") == "0";
 
     static readonly bool RefineProjOff = Environment.GetEnvironmentVariable("P3D_REFINEPROJ") == "0";
+    static readonly bool RefineFacingMemoOff = Environment.GetEnvironmentVariable("P3D_REFINEFACINGMEMO") == "0";
     private static void Refine(ISurface3 src, List<Vector3d> P, List<Vector2d> UV, List<int> T, Vector2d scale, double seamU = 0)
     {
         // ПОРОГ — НЕ СТРОЖЕ, ЧЕМ НА КРАЯХ ГРАНИ. Края гранятся по шагу угла (у окружности R20
@@ -3485,12 +3486,20 @@ public static partial class ExactFaceMesher
         // щепку поперёк закрутки поверхности; уточнение такие (площадь меньше доли грани) пропускало, а самопроверка отвергала
         // грань. Проверяются только узкие (обычные переворачиваются редко, и их ловит самопроверка); сторона — по большинству,
         // считается при первой узкой. Мутация P3D_REFINEFLIP=0.
+        // k185i: сторона узкого треугольника — один раз на треугольник (по вершинам): проекция центра на NURBS у каждого узкого
+        // треугольника на каждом из до 200 проходов — колесо 28035T11: 647 с и 68 ГБ выделений в уточнении. Те же вершины — тот
+        // же ответ. Мутация P3D_REFINEFACINGMEMO=0.
+        var facingMemo = RefineFacingMemoOff ? null : new Dictionary<(int, int, int), int>();
         int Facing(int t)
         {
+            var fk = Key(T[t], T[t + 1], T[t + 2]);
+            if (facingMemo != null && facingMemo.TryGetValue(fk, out var fm)) return fm;
             // как в самопроверке: нормаль в проекции центра треугольника
             var nn = src.NormalAt(src.ProjectToUV((P[T[t]] + P[T[t + 1]] + P[T[t + 2]]) / 3));
             double sd = Vector3d.Dot(Vector3d.Cross(P[T[t + 1]] - P[T[t]], P[T[t + 2]] - P[T[t]]), nn);
-            return sd > 0 ? 1 : sd < 0 ? -1 : 0;
+            int r = sd > 0 ? 1 : sd < 0 ? -1 : 0;
+            if (facingMemo != null) facingMemo[fk] = r;
+            return r;
         }
         int? major = null;
         bool Flipped(int t)

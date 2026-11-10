@@ -555,7 +555,17 @@ public static class XtToStep
 
         /// <summary>Плотная ломаная кривой свободной формы в естественном направлении; null — аналитическая кривая (прямая,
         /// окружность, эллипс — их обрезает сам импорт по вершинам).</summary>
+        // k185i: плотная ломаная кривой — один раз на узел кривой (базовая кривая пересечения у многих обрезанных кривых — шкив
+        // 3140T3: 80 обрезок сгущали одну и ту же кривую заново, 56 с). Возвращается копия. Мутация P3D_XTDENSECACHE=0.
+        readonly Dictionary<int, List<Vector3d>?> _denseMemo = new();
+        static readonly bool DenseCacheOff = Environment.GetEnvironmentVariable("P3D_XTDENSECACHE") == "0";
         List<Vector3d>? Dense(XtNode cn, int depth = 0)
+        {
+            if (DenseCacheOff) return DenseCore(cn, depth);
+            if (!_denseMemo.TryGetValue(cn.Id, out var d)) _denseMemo[cn.Id] = d = DenseCore(cn, depth);
+            return d == null ? null : new List<Vector3d>(d);
+        }
+        List<Vector3d>? DenseCore(XtNode cn, int depth = 0)
         {
             if (depth > 4) return null;
             switch (cn.Name)
