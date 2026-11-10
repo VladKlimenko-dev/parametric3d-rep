@@ -6915,6 +6915,8 @@ Check("UI-SKETCH-PLANE-K185", () =>
         Console.WriteLine($"  rotate: image centre {img.Center}, angle {img.Angle} (was {a0})");
         Require(Sketch.RollImageOff || (sk.Plane.ToWorld(img.Center) - wc).Length < 1e-9 && Math.Abs(img.Angle - a0 - 90) < 1e-9, "the image did not turn with the sketch");
         sk.RotateQuarter(false);
+        sk.Images.Remove(img);
+        sk.AddEntity(new SkLine(new SkPoint(0, 0), new SkPoint(10, 5)));   // пустой эскиз при выходе не сохраняется
         w.FinishSketch(); Run();
         // а8.1–а8.3: настройка эскиза по-английски
         if (!Loc.En) w.ToggleLanguage();
