@@ -1,0 +1,40 @@
+  stage -1 of 4
+  feature Revolve RevolveFeature downgrade - error  beyond False
+  feature Extrude ExtrudeFeature downgrade - error  beyond False
+  feature Extrude ExtrudeFeature downgrade (35, 0) error  beyond False
+  feature Extrude ExtrudeFeature downgrade (36, 0) error  beyond False
+  body faces 40, faceted 35: #66ed9629e5/revolve:side[0.1], #66ed9629e5/revolve:side[0.2], #66ed9629e5/revolve:side[0.3], #66ed9629e5/revolve:side[0.4], #66ed9629e5/revolve:side[0.5], #66ed9629e5/revolve:side[0.6], #66ed9629e5/revolve:side[0.7], #66ed9629e5/revolve:side[0.8], #66ed9629e5/revolve:side[0.9], #66ed9629e5/revolve:side[0.10], #66ed9629e5/revolve:side[0.11], #66ed9629e5/revolve:side[0.12]
+  tags #aab1feb550/extrude[1]:side[0.1] #aab1feb550/extrude[1]:side[0.2] #8754406a59/extrude[0]:side[0.0] #aab1feb550/extrude[0]:side[0.1] #aab1feb550/extrude[0]:side[0.2] #4854129fed/extrude[0]:side[0.0]
+    #aab1feb550/extrude[1]:side[0.1]: source ExtrudedSurface, authoritative ExtrudedSurface, loops 1, edges LineCurve3/ArcCurve3
+    #aab1feb550/extrude[1]:side[0.2]: source ExtrudedSurface, authoritative ExtrudedSurface, loops 1, edges LineCurve3/IntersectionCurve3
+    #8754406a59/extrude[0]:side[0.0]: source ExtrudedSurface, authoritative ExtrudedSurface, loops 4, edges LineCurve3/IntersectionCurve3
+    #aab1feb550/extrude[0]:side[0.1]: source ExtrudedSurface, authoritative ExtrudedSurface, loops 1, edges LineCurve3/IntersectionCurve3
+    #aab1feb550/extrude[0]:side[0.2]: source ExtrudedSurface, authoritative ExtrudedSurface, loops 1, edges LineCurve3/ArcCurve3
+    #4854129fed/extrude[0]:side[0.0]: source ExtrudedSurface, authoritative ExtrudedSurface, loops 4, edges LineCurve3/IntersectionCurve3
+  warn QuadricCut: this case is not supported yet (planar body, through hole along Z).
+  warn Boolean: 100 chord chain(s) restored to arcs (2879 segments collapsed).
+  warn Geometry downgrade after ExtrudeFeature: 35 faceted face(s), 0 faceted edge(s) (policy AllowBoundedFaceting).
+  warn QuadricCut: this case is not supported yet (planar body, through hole along Z).
+  warn Boolean: 104 chord chain(s) restored to arcs (2975 segments collapsed).
+  warn Geometry downgrade after ExtrudeFeature: 36 faceted face(s), 0 faceted edge(s) (policy AllowBoundedFaceting).
+  stale retries 0
+{"test":"UI-NECK-CUT-K185","ok":false,"error":"cut from a saved state left faceted faces"}
+  feature Revolve RevolveFeature downgrade - error 
+  feature Extrude ExtrudeFeature downgrade - error 
+  feature Extrude ExtrudeFeature downgrade - error 
+  feature Extrude ExtrudeFeature downgrade - error 
+  feature Circular pattern CircularPatternFeature downgrade - error 
+  warn QuadricCut: this case is not supported yet (planar body, through hole along Z).
+  warn Boolean: general analytic path (14 faces, exact surfaces).
+  warn Boolean: general analytic path (18 faces, exact surfaces).
+  warn Boolean: general analytic path (18 faces, exact surfaces).
+  warn Boolean: general analytic path (24 faces, exact surfaces).
+  warn Boolean: general analytic path (24 faces, exact surfaces).
+  warn Boolean: general analytic path (30 faces, exact surfaces).
+  warn Boolean: general analytic path (30 faces, exact surfaces).
+  warn Boolean: general analytic path (36 faces, exact surfaces).
+  warn Boolean: general analytic path (36 faces, exact surfaces).
+  warn Circular pattern: 2 operation(s) repeated 3 time(s).
+  body faces 36, faceted 0, volume 246325.13
+{"test":"UI-SLEEVE-PATTERN-K185","ok":true,"error":null}
+{"passed":1,"failed":1}

@@ -1,0 +1,9 @@
+/home/runner/work/parametric3d-rep/parametric3d-rep/tests/ui/Program.cs(6901,25): warning CS8629: Nullable value type may be null. [/home/runner/work/parametric3d-rep/parametric3d-rep/tests/ui/UiChecks.csproj]
+
+Build succeeded.
+
+/home/runner/work/parametric3d-rep/parametric3d-rep/tests/ui/Program.cs(6901,25): warning CS8629: Nullable value type may be null. [/home/runner/work/parametric3d-rep/parametric3d-rep/tests/ui/UiChecks.csproj]
+    1 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:01:15.17
