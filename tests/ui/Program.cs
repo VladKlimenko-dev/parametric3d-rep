@@ -6973,6 +6973,21 @@ Check("UI-SKETCH-PLANE-PANEL-K185", () =>
     finally { w.Close(); }
 });
 
+Check("UI-SLEEVE-PATTERN-K185", () =>
+{
+    // k185 (замечание 10.11, 12:04): втулка 100395799 — третий вырез (эскиз на плоской грани выреза 2) давал «приближённую
+    // геометрию»; круговой массив вырезов 2 и 3 отказывал: «не находит поверхности» для выреза по грани
+    var s = DocumentSession.Open(Path.Combine(AppContext.BaseDirectory, "data", "sketch_k185_sleeve_pattern.p3d")); BuildNow(s);
+    var part = s.Part!;
+    if (part.StageIndex >= 0) { part.EndInsertMode(resume: true); BuildNow(s); }
+    foreach (var f in part.Features)
+        Console.WriteLine($"  feature {f.Name} {f.GetType().Name} downgrade {(part.Downgrades.TryGetValue(f, out var dg) ? dg.ToString() : "-")} error {f.Error}");
+    foreach (var wmsg in part.Warnings.Take(30)) Console.WriteLine("  warn " + wmsg);
+    foreach (var b in part.Bodies) Console.WriteLine($"  body faces {b.Faces.Count()}, faceted {Parametric3D.Kernel.Topology.EntityNames.Faceted(b).Count}, volume {part.Volume:0.###}");
+    Require(part.Features.All(f => f.Error == null), "feature errors: " + string.Join("; ", part.Features.Where(f => f.Error != null).Select(f => f.Name + ": " + f.Error)));
+    Require(part.Bodies.All(b => Parametric3D.Kernel.Topology.EntityNames.Faceted(b).Count == 0), "approximate (faceted) faces left");
+});
+
 Check("UI-SKETCH-DIMEXT-K185", () =>
 {
     // k185 (замечание 09.11, 12:39, пп. 1–2): размер между параллельными отрезками — размерная линия на обоих отрезках: выносных
