@@ -3400,6 +3400,7 @@ public static partial class ExactFaceMesher
     static readonly bool RefineCacheOff = Environment.GetEnvironmentVariable("P3D_REFINECACHE") == "0";
 
     static readonly bool RefineProjOff = Environment.GetEnvironmentVariable("P3D_REFINEPROJ") == "0";
+    static readonly bool RefineDupGridOff = Environment.GetEnvironmentVariable("P3D_REFINEDUPGRID") == "0";
     static readonly bool RefineFacingMemoOff = Environment.GetEnvironmentVariable("P3D_REFINEFACINGMEMO") == "0";
     private static void Refine(ISurface3 src, List<Vector3d> P, List<Vector2d> UV, List<int> T, Vector2d scale, double seamU = 0)
     {
@@ -3519,6 +3520,22 @@ public static partial class ExactFaceMesher
             return major != 0 && Facing(t) == -major;
         }
         var flipBad = new HashSet<(int, int, int)>();
+        // k185i: ТОЧКА УЖЕ ЕСТЬ — ПО СЕТКЕ ЯЧЕЕК, а не перебором всех точек на каждую вставку: у граней с десятками тысяч точек
+        // края (колесо 28035T11, шестерня 6169K406) до 3000 вставок × все точки — минуты на грань. Ячейка — 2·micro, смотрятся
+        // соседние; ответ тот же. Мутация P3D_REFINEDUPGRID=0 — перебор.
+        const double microG = 2e-4;
+        var dupGrid = RefineDupGridOff ? null : new Dictionary<(long, long, long), List<int>>();
+        int dupIndexed = 0;
+        (long, long, long) Cell(Vector3d x) => ((long)Math.Floor(x.X / (2 * microG)), (long)Math.Floor(x.Y / (2 * microG)), (long)Math.Floor(x.Z / (2 * microG)));
+        bool HasNear(Vector3d q)
+        {
+            if (dupGrid == null) return P.Any(x => (x - q).LengthSquared < microG * microG);
+            for (; dupIndexed < P.Count; dupIndexed++) { var ck = Cell(P[dupIndexed]); if (!dupGrid.TryGetValue(ck, out var l)) dupGrid[ck] = l = new List<int>(2); l.Add(dupIndexed); }
+            var (cx, cy, cz) = Cell(q);
+            for (long i = cx - 1; i <= cx + 1; i++) for (long j = cy - 1; j <= cy + 1; j++) for (long k = cz - 1; k <= cz + 1; k++)
+                if (dupGrid.TryGetValue((i, j, k), out var l)) foreach (int pi in l) if ((P[pi] - q).LengthSquared < microG * microG) return true;
+            return false;
+        }
         for (int pass = 0; pass < 200 && added < maxPoints; pass++)   // предел 40 достигался: оставалось 6 негодных треугольников
         {
             KernelContext.Checkpoint("mesh.refine.pass");
@@ -3606,7 +3623,7 @@ public static partial class ExactFaceMesher
                     if (!SideSplitOff)
                     {
                         if (!map.TryGetValue((lb, la), out int to) || to == t) { SkipMicro++; continue; }
-                        if (!DupInsOff && P.Any(x => (x - onSide).LengthSquared < micro * micro)) { SkipMicro++; continue; }
+                        if (!DupInsOff && HasNear(onSide)) { SkipMicro++; continue; }
                         int x1 = Third(T, t, la, lb), y1 = Third(T, to, lb, la);
                         if (x1 < 0 || y1 < 0) { SkipMicro++; continue; }
                         int vs = P.Count; P.Add(onSide); UV.Add(mSide); added++; RefineAdded = added; Interlocked.Increment(ref SideSplits);
@@ -3642,7 +3659,7 @@ public static partial class ExactFaceMesher
                 // KRN-06 (06.12): ТОЧКА УЖЕ ЕСТЬ. Деление по длинной стороне у двух соседних щепок ставило одну и ту же середину
                 // их общей стороны дважды — вырожденный треугольник (сторона 0), грань отвергалась (лента катящегося шара у
                 // отверстия d30 в валу R20). Мутация P3D_MESHDUPINS=0.
-                if (!DupInsOff && P.Any(x => (x - onS).LengthSquared < micro * micro)) { SkipMicro++; continue; }
+                if (!DupInsOff && HasNear(onS)) { SkipMicro++; continue; }
                 int v = P.Count; P.Add(onS); UV.Add(m); added++; RefineAdded = added;
                 Remove(t);
                 T[t] = a; T[t + 1] = b; T[t + 2] = v; Add(t);

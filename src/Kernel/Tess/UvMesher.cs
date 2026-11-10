@@ -20,6 +20,8 @@ namespace Parametric3D.Kernel.Tess;
 /// </summary>
 public static class UvMesher
 {
+    static readonly bool EarBigSkipOff = Environment.GetEnvironmentVariable("P3D_EARBIGSKIP") == "0";
+    const int EarBigN = 8000;
     static readonly bool InvDbg = Environment.GetEnvironmentVariable("P3D_UVINVDBG") == "1";
     public static Action<string>? Debug = Environment.GetEnvironmentVariable("P3D_UVDBG") == "1" ? m => Console.Error.WriteLine("UV " + m) : null;
     /// <summary>KRN-03: сколько раз полюс шапки выбран по обходу края / не удалось решить.</summary>
@@ -337,6 +339,14 @@ public static class UvMesher
             var swTri = System.Diagnostics.Stopwatch.StartNew(); string triHow = "ear";
             if (!ExactFaceMesher.CdtBigOff && poUv.Count + phUv.Sum(h => h.Count) >= ExactFaceMesher.CdtBigN
                 && Cdt.Triangulate(poUv, phUv, out var cdtPts) is { Count: > 0 } cdtTris) { tr = cdtTris; uvs = cdtPts; triHow = "cdt"; }
+            else if (!EarBigSkipOff && poUv.Count + phUv.Sum(h => h.Count) > EarBigN)
+            {
+                // k185i: Делоне не справился с огромным контуром (десятки тысяч точек края в развёртке — шестерня 6169K406: 33 тыс.),
+                // ушная на нём — O(n²): 125–230 с на грань, и итог всё равно неверен (контур, который не взял Делоне, обычно
+                // пересекает себя). Отказ этим способом — грань берут другие. Мутация P3D_EARBIGSKIP=0.
+                why = $"the parameter-space contour is too large for ear clipping ({poUv.Count + phUv.Sum(h => h.Count)} points) and constrained Delaunay failed";
+                return null;
+            }
             else { tr = Triangulator.Triangulate(poUv, phUv, out var earPts); uvs = earPts; }
             // k185i: долгая триангуляция области — в разбор (сколько точек, отверстий, каким способом)
             if (Diagnostics.Prof.Enabled && swTri.Elapsed.TotalSeconds > 2)
