@@ -141,7 +141,21 @@ public static partial class DirectRound
                 bool OnBlank(Seg g) => Math.Abs(Radial(g.A) - law.Radius) < 1e-8 && Math.Abs(Radial(g.B) - law.Radius) < 1e-8
                     && Math.Abs(Radial(g.Curve.PointAt((g.Curve.T0 + g.Curve.T1) / 2)) - law.Radius) < 1e-8;
                 int n = ordered.Count, from = Enumerable.Range(0, n).FirstOrDefault(i => !OnBlank(ordered[i]) && OnBlank(ordered[(i + n - 1) % n]), -1);
-                if (ordered.Any(g => !OnBlank(g)))
+                if (ordered.All(g => !OnBlank(g)))
+                {
+                    // Turned-down blank: the whole thread section lies inside the blank, so the
+                    // step is an annulus between the blank circle and the thread section.
+                    var ring = ArcCurve3.FullCircle(new Frame3(center, law.Frame.U, law.Frame.V), law.Radius);
+                    var r0 = ring.PointAt(ring.T0);
+                    wall.Loops.Add(new List<Seg> { new() { Curve = ring, A = r0, B = r0 } });
+                    var far = ordered[0].A;
+                    var stop = new FDesc { Surf = new PlaneSurface(Frame3.FromNormal(center, -normal)), Tag = "thread:stop", N = -normal,
+                        Hint = center + (far - center).Normalized() * ((Radial(far) + law.Radius) / 2) };
+                    stop.Loops.Add(ordered);
+                    stop.Loops.Add(new List<Seg> { new() { Curve = ring, A = r0, B = r0 } });
+                    faces.Add(stop);
+                }
+                else if (ordered.Any(g => !OnBlank(g)))
                 {
                     // Abrupt ending: the groove stops at z = zb with a flat step face.
                     if (from < 0) { why = "thread stop section has no blank arc"; return null; }

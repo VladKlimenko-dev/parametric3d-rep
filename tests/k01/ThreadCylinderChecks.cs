@@ -121,15 +121,15 @@ static partial class Program
                 Log(new { test = "THREAD-CYLINDER-HALF-METRICS", exit, ms, volume, expected, built, faces = body.Faces.Count(), tail });
             });
         // User repro: 1/2-14 NPT (taper 1:16) on a plain Ø21 cylinder, built directly as one tapered cell.
-        foreach (var (exit, length) in new[] { (true, 30.0), (false, 30.0), (false, 15.0) })
+        foreach (var (exit, length, rad) in new[] { (true, 30.0, 10.5), (false, 30.0, 10.5), (false, 15.0, 10.5), (false, 30.0, 11.5), (false, 15.0, 11.5) })
         {
-            string tid = $"THREAD-CYLINDER-NPT-D21-H30-L{length}-EXIT{exit}";
+            string tid = $"THREAD-CYLINDER-NPT-D{2 * rad:0}-H30-L{length}-EXIT{exit}";
             if (Environment.GetEnvironmentVariable("P3D_THREADCASE") is { } tf && !tid.Contains(tf)) continue;
             Check(tid, () =>
             {
                 var part = new Part("npt");
                 var sketch = new Sketch("circle", Frame3.XY); part.Add(sketch);
-                sketch.AddEntity(new SkCircle(new SkPoint(0, 0), 10.5));
+                sketch.AddEntity(new SkCircle(new SkPoint(0, 0), rad));
                 var ctx = new BuildContext { Part = part, Parameters = new ParameterTable() };
                 var extrusion = new ExtrudeFeature { SketchId = sketch.Id };
                 extrusion.Side1.Distance = 30;
@@ -152,7 +152,7 @@ static partial class Program
                 double volume = AnalyticVolume.Of(body) ?? double.NaN;
                 double uncached = AnalyticVolume.OfUncached(body) ?? double.NaN;
                 double taper = Math.Tan(spec.HalfConeDeg * Math.PI / 180);
-                double expected = TaperVolumeOracle(spec, 10.5, 30, length, exit, taper);
+                double expected = TaperVolumeOracle(spec, rad, 30, length, exit, taper);
                 Require(Math.Abs(volume - expected) < expected * 2e-6 && Math.Abs(uncached - expected) < expected * 2e-6,
                     $"independent volume integral {volume} / {uncached} vs {expected}");
                 Require(BooleanOp.VolumeVsFacets(body) is not { Agree: false }, "display/boundary volume mismatch");

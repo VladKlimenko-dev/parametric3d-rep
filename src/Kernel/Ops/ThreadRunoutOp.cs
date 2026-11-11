@@ -95,6 +95,15 @@ internal sealed class ThreadRunoutLaw
         Frame = frame; Lead = lead; Height = height; Radius = radius; Left = left; SmoothExit = smoothExit; Taper = taper; Crest0 = crest;
         var p = profile.OrderBy(x => x.Y).ThenBy(x => x.X).ToArray();
         Root = p[0].Y; Q0 = p[0].X; Q1 = p[1].X;
+        // Oversized blank: the crest is turned down to the crest cone/cylinder, so the flanks are
+        // extended along their own lines up to the blank (they are cut away above the crest).
+        if (double.IsFinite(crest) && p[2].Y < radius && Math.Abs(p[2].Y - p[3].Y) <= 1e-12 && p[2].Y > Root
+            && p[2].X < p[0].X && p[3].X > p[1].X)
+        {
+            double k = (radius + 1e-3 - Root) / (p[2].Y - Root);
+            p[2] = new Vector2d(p[0].X + (p[2].X - p[0].X) * k, radius + 1e-3);
+            p[3] = new Vector2d(p[1].X + (p[3].X - p[1].X) * k, radius + 1e-3);
+        }
         if (Math.Abs(p[1].Y - Root) > 1e-12 || Math.Abs(p[2].Y - p[3].Y) > 1e-12
             || !(Q0 < Q1 && p[2].X < Q0 && p[3].X > Q1 && Root > 0 && Root < radius && p[2].Y >= radius))
             throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: a flat-root trapezoid is required.");
