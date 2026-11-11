@@ -701,6 +701,13 @@ public static class DocumentFile
         CosmeticThreadFeature ct => Dto("thread", ct, d =>
         {
             PutV(d, "pitch", ct.Pitch); PutV(d, "length", ct.Length);
+            if (!ct.Cosmetic) Flag(d, "cut");
+            if (ct.SmoothExit) Flag(d, "smooth_exit");
+            if (ct.LeftHand) Flag(d, "left");
+            PutS(d, "type", ct.TypeId);
+            if (ct.Mode != ThreadLength.Blind) PutS(d, "length_mode", ct.Mode.ToString());
+            if (ct.StartAt is { } tsa) { (d.Num ??= new())["start_x"] = tsa.X; d.Num["start_y"] = tsa.Y; d.Num["start_z"] = tsa.Z; }
+            if (ct.EndAt is { } tea) { (d.Num ??= new())["end_x"] = tea.X; d.Num["end_y"] = tea.Y; d.Num["end_z"] = tea.Z; }
             d.OpenFaces = ct.OnFaces.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList();
             d.FaceNames = ct.OnFaceNames.Count > 0 ? ct.OnFaceNames.ToList() : null;
         }),
@@ -1335,7 +1342,14 @@ public static class DocumentFile
                 }
                 case "thread":
                 {
-                    var ct = new CosmeticThreadFeature(fd.Name) { Suppressed = fd.Suppressed, Pitch = GetV(fd, "pitch", 1.5), Length = GetV(fd, "length", 0) };
+                    var ct = new CosmeticThreadFeature(fd.Name)
+                    {
+                        Suppressed = fd.Suppressed, Pitch = GetV(fd, "pitch", 1.5), Length = GetV(fd, "length", 0),
+                        Cosmetic = !HasFlag(fd, "cut"), SmoothExit = HasFlag(fd, "smooth_exit"), LeftHand = HasFlag(fd, "left"), TypeId = GetS(fd, "type"),
+                    };
+                    if (Enum.TryParse<ThreadLength>(GetS(fd, "length_mode"), out var tlm)) ct.Mode = tlm;
+                    if (fd.Num != null && fd.Num.ContainsKey("start_x")) ct.StartAt = new Vector3d(GetD(fd, "start_x", 0), GetD(fd, "start_y", 0), GetD(fd, "start_z", 0));
+                    if (fd.Num != null && fd.Num.ContainsKey("end_x")) ct.EndAt = new Vector3d(GetD(fd, "end_x", 0), GetD(fd, "end_y", 0), GetD(fd, "end_z", 0));
                     for (int i = 0; i + 2 < fd.OpenFaces.Count; i += 3) ct.OnFaces.Add(new Vector3d(fd.OpenFaces[i], fd.OpenFaces[i + 1], fd.OpenFaces[i + 2]));
                     if (fd.FaceNames != null) ct.OnFaceNames.AddRange(fd.FaceNames);
                     part.AddFeature(ct);

@@ -208,32 +208,4 @@ public sealed class PointsPatternOp : FeatureOp<PointsPatternFeature>
     }
 }
 
-public sealed class CosmeticThreadOp : FeatureOp<CosmeticThreadFeature>
-{
-    private RefField _faces = null!;
-    private readonly RefCache<Vector3d> _cache = new();
-    public CosmeticThreadOp(CosmeticThreadFeature? existing = null) : base(existing) { }
-    public override string Title => "Косметическая резьба";
-    public override string Icon => "f_thread_but.svg";
-    protected override CosmeticThreadFeature Create() => new();
-
-    public override void Build(OpPanel p)
-    {
-        _faces = p.Ref(new RefField { Label = "Цилиндрическая грань", Filter = PickFilter.Faces, Accept = r => r.Kind == PickKind.Face, Single = true });
-        if (Editing) _faces.Kept = F.OnFaces.Count;
-        p.Number("Шаг", () => F.Pitch, v => F.Pitch = v);
-        p.Number("Длина (0 — вся грань)", () => F.Length, v => F.Length = v);
-        p.Note("Резьба — обозначение: тело не меняется; диаметр и вид берутся с грани.");
-    }
-
-    protected override void SeedRefs() => Seed(_faces);
-
-    protected override void Push()
-    {
-        if (_faces.Touched)
-        {
-            F.OnFaces.Clear(); F.OnFaceNames.Clear();
-            F.OnFaces.AddRange(_cache.Resolve(_faces, Refs.PointOf));
-        }
-    }
-}
+// CosmeticThreadOp (резьба: косметическая или вырез по таблице резьб) — в ThreadOp.cs.

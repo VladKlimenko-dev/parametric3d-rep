@@ -168,6 +168,23 @@ public static class SceneBuilder
 
     // ------------------------------------------------------------------ тело
 
+    /// <summary>
+    /// Резьба в виде: косметическая — винтовая линия по грани (цветом рёбер); настоящая (вырез) — та же линия и профиль
+    /// впадины, пока открыта её панель (предпросмотр, цветом выреза). Мутация P3D_THREADLINES=0 — без линий.
+    /// </summary>
+    static readonly bool ThreadLinesOff = Environment.GetEnvironmentVariable("P3D_THREADLINES") == "0";
+    private static void AddThreadLines(Part part, Matrix4 xf, SceneData s, RenderTheme th)
+    {
+        for (int i = 0; i < part.Features.Count && i < part.EffectiveStage; i++)
+        {
+            if (part.Features[i] is not Model.Features.CosmeticThreadFeature { Suppressed: false, Error: null, Lines: { } lines } t) continue;
+            if (!t.Cosmetic && !t.ShowPreview) continue;
+            var col = t.Cosmetic ? th.Edge : th.PreviewCutEdge;
+            float w = t.Cosmetic ? th.EdgeWidth : th.EdgeWidth * 1.2f;
+            foreach (var (a, b) in lines) s.Lines.Add(Line(Tr(a, xf), Tr(b, xf), col, w, 0, 0));
+        }
+    }
+
     static readonly bool GhostOthersOff = Environment.GetEnvironmentVariable("P3D_GHOSTOTHERS") == "0";
     /// <summary>Непрозрачность полупрозрачных тел (прозрачность 85 %).</summary>
     public const float GhostAlpha = 0.15f;
@@ -177,6 +194,7 @@ public static class SceneBuilder
         var md = part.Mesh;
         if (md == null || md.Vertices.Length == 0) return;
         bool stale = IsStalePreview(part, _previewPart);
+        if (!ghostAll && !ThreadLinesOff) AddThreadLines(part, xf, s, th);
 
         var color = th.Body;
         if (part.Material is { } mat && mat.Name != Material.Steel().Name)

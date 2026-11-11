@@ -76,4 +76,9 @@
     <Content Include="../tests/ui/data/user_*.p3d;../tests/ui/data/user_models.tsv" Link="UserModels/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Таблица резьб (операция «Резьба»): рядом с программой -->
+  <ItemGroup>
+    <Content Include="../threads_db.json;../threads_table.csv" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('../threads_db.json')" />
+  </ItemGroup>
+
 </Project>

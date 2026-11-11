@@ -8,5 +8,6 @@ logs/**/a06/
 *.step
 .vs/
 *.user
+/archive/kernel_k*.zip
 logs/regress_*/
 !tests/stepfiles/*.step

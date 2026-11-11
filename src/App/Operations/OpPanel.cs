@@ -199,7 +199,7 @@ public sealed class OpPanel
     /// <summary>Кнопки панели по подписи (проверки).</summary>
     public readonly Dictionary<string, Button> Buttons = new();
 
-    public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null, Action? focused = null, double scrub = 0)
+    public void Number(string label, Func<ValueRef> get, Action<ValueRef> set, string unit = "мм", Func<bool>? visible = null, Action? focused = null, double scrub = 0, Func<bool>? enabled = null)
     {
         // u13: длины — в единицах детали (мм или дюймы); формулы — как записаны
         // k123: поле длины — в единице системы детали (см, м, дюйм, фут…), не только в дюймах
@@ -257,9 +257,42 @@ public sealed class OpPanel
         tb.LostFocus += (_, _) => Commit();
         if (focused != null) tb.GotFocus += (_, _) => focused();
         ToolTip.SetTip(tb, L("Число или формула с параметрами; ↑↓ — шаг 1, Shift — 10, Ctrl — 0.1; Enter — применить"));
-        When(Row(label, dock), visible);
+        var row = Row(label, dock);
+        When(row, visible);
+        if (enabled != null) { _enabled.Add((row, enabled)); row.IsEnabled = enabled(); row.Opacity = row.IsEnabled ? 1 : 0.45; }
         _numbers.Add((tb, get));
     }
+
+    /// <summary>
+    /// Список с меняющимися пунктами (типы резьбы по выбранной грани): пункты не переводятся (обозначения); при каждом
+    /// Refresh пункты и выбранный берутся заново.
+    /// </summary>
+    public ComboBox List(string label, Func<IReadOnlyList<string>> items, Func<int> get, Action<int> set, Func<bool>? visible = null, Func<bool>? enabled = null)
+    {
+        var shown = items().ToList();
+        var cb = new ComboBox { ItemsSource = shown, SelectedIndex = get(), HorizontalAlignment = HorizontalAlignment.Stretch, MaxDropDownHeight = 360 };
+        bool sync = false;
+        cb.SelectionChanged += (_, _) => { if (sync || cb.SelectedIndex < 0) return; set(cb.SelectedIndex); _op.FieldChanged(); };
+        _syncers.Add(() =>
+        {
+            sync = true;
+            try
+            {
+                var now = items();
+                if (!now.SequenceEqual(shown)) { shown = now.ToList(); cb.ItemsSource = shown; }
+                int g = get();
+                if (cb.SelectedIndex != g) cb.SelectedIndex = g;
+            }
+            finally { sync = false; }
+        });
+        var row = Row(label, cb);
+        When(row, visible);
+        if (enabled != null) _enabled.Add((cb, enabled));
+        Lists[label] = cb;
+        return cb;
+    }
+    /// <summary>Списки панели по подписи (проверки).</summary>
+    public readonly Dictionary<string, ComboBox> Lists = new();
 
     /// <summary>u13: строка текста (формула кривой и т. п.): применяется по Enter и при уходе из поля.</summary>
     public void Text(string label, Func<string> get, Action<string> set, Func<bool>? visible = null)

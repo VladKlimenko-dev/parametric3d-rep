@@ -353,6 +353,7 @@ static partial class Program
         if (Environment.GetEnvironmentVariable("P3D_UVMESH") == "1") Parametric3D.Kernel.Tess.ExactFaceMesher.UseUvMesher = true;
         // Полный прогон разделён на две части: целиком он перестал укладываться в предел одной
         // команды среды (300 с). allA — K01–K06, allB — K07–K10 и G.
+        if (mode is "threadarchive") ThreadArchiveChecks();
         if (mode is "one")   // диагностика: один сценарий по идентификатору, трасса нового входа по PLANARDBG=1
         {
             if (Environment.GetEnvironmentVariable("PLANARDBG") == "1")

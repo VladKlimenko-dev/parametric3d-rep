@@ -1,0 +1,46 @@
+{"runtime":".NET 10.0.12","cpu":2,"os":"Ubuntu 26.04 LTS","args":["query"]}
+{"test":"Q3-DISTANCE-AND-BOUNDS","ok":true}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"box","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"cylinder","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"cone","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"sphere","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"torus","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"NURBS quarter cylinder","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","name":"NURBS trimmed (quarter cylinder minus a cross hole)","n":4000,"wrong":0,"unknown":0}
+{"test":"Q1-CLASSIFY-ALL-KINDS","ok":true}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"sphere\u2013sphere","Distance":9.6155281280883,"want":9.615528128088304,"WhereA":"face","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"box\u2013box (faces)","Distance":5,"want":5,"WhereA":"face","WhereB":"vertex"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"box\u2013box (corners)","Distance":13,"want":13,"WhereA":"vertex","WhereB":"vertex"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"box\u2013box (edges crossing)","Distance":2,"want":2,"WhereA":"vertex","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"cylinder\u2013sphere (side)","Distance":11,"want":11,"WhereA":"edge","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"cylinder\u2013sphere (rim)","Distance":10.142135623730947,"want":10.142135623730951,"WhereA":"vertex","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"torus\u2013sphere (in the hole)","Distance":4.999999999999999,"want":5,"WhereA":"face","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"cone\u2013plane box","Distance":5,"want":5,"WhereA":"vertex","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"cylinders, crossing axes","Distance":5,"want":5,"WhereA":"edge","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"rotated cylinder\u2013sphere","Distance":11,"want":11,"WhereA":"edge","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"NURBS quarter cylinder\u2013sphere","Distance":4.970562748477136,"want":4.970562748477139,"WhereA":"face","WhereB":"face"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"overlapping","Distance":0,"want":0,"WhereA":"inside","WhereB":"contact"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","name":"contained","Distance":0,"want":0,"WhereA":"contact","WhereB":"inside"}
+{"test":"Q3-PROJECT-AND-BODY-DISTANCE","ok":true}
+{"test":"Q2-MASS","name":"box 60\u00D740\u00D720","route":"analytic boundary integral","dV":0,"eV":0.0009279999999999999,"dC":3.370400129833633E-14,"eC":7.233871234307528E-07,"dJ":2.60770320892334E-08,"eJ":3.8976002060833914,"relJ":1.8738462529247073E-07}
+{"test":"Q2-MASS","name":"box 60\u00D740\u00D720 (rotated, moved)","route":"analytic boundary integral","dV":2.1827872842550278E-11,"eV":0.0009279999999999999,"dC":1.4197803601653502E-13,"eC":1.0357966996424405E-06,"dJ":3.129243850708008E-07,"eJ":7.9910652851079504,"relJ":4.048926378495862E-07}
+{"test":"Q2-MASS","name":"cylinder r10 h30","route":"analytic boundary integral","dV":7.275957614183426E-12,"eV":0.0002604629533308689,"dC":1.3866186096933003E-12,"eC":5.694673555479823E-07,"dJ":1.8102582544088364E-07,"eJ":0.3317831828325172,"relJ":3.520328905503812E-07}
+{"test":"Q2-MASS","name":"cylinder r10 h30 (rotated, moved)","route":"analytic boundary integral","dV":0,"eV":0.0002604914570218404,"dC":1.6860723982825609E-12,"eC":6.959989039729315E-07,"dJ":1.8905848264694214E-07,"eJ":0.4955481443253864,"relJ":5.273327159560465E-07}
+{"test":"Q2-MASS","name":"sphere r12","route":"analytic boundary integral","dV":0,"eV":0.00018771282376022606,"dC":1.734723475976807E-18,"eC":5.390522769575982E-07,"dJ":1.1641532182693481E-10,"eJ":0.24330653014982348,"relJ":5.835780309588648E-07}
+{"test":"Q2-MASS","name":"sphere r12 (rotated, moved)","route":"analytic boundary integral","dV":0,"eV":0.00018771282376022568,"dC":0,"eC":5.389349668832832E-07,"dJ":2.3283064365386963E-10,"eJ":0.24320064356841237,"relJ":5.833240588083976E-07}
+{"test":"Q2-MASS","name":"cone r10 h24","route":"analytic boundary integral","dV":9.094947017729282E-13,"eV":0.00011545045190264519,"dC":2.561433893785868E-12,"eC":1.1271433329455791E-06,"dJ":5.977926775813103E-07,"eJ":0.20852427661536338,"relJ":2.266917307240218E-06}
+{"test":"Q2-MASS","name":"cone r10 h24 (rotated, moved)","route":"analytic boundary integral","dV":5.002220859751105E-12,"eV":0.00011545045362058013,"dC":2.006367536592033E-10,"eC":1.0727621850201374E-06,"dJ":2.645785571075976E-06,"eJ":0.18888454853128844,"relJ":2.0555738691704025E-06}
+{"test":"Q2-MASS","name":"torus R20 r6","route":"analytic boundary integral","dV":1.8189894035458565E-12,"eV":0.0004873184588981951,"dC":0,"eC":1.27743860366835E-06,"dJ":4.656612873077393E-10,"eJ":2.029144265831701,"relJ":3.343665411057938E-07}
+{"test":"Q2-MASS","name":"torus R20 r6 (rotated, moved)","route":"analytic boundary integral","dV":1.8189894035458565E-12,"eV":0.0004873184588981818,"dC":0,"eC":1.307112199835904E-06,"dJ":3.725290298461914E-09,"eJ":2.1245090670886153,"relJ":3.69907580921339E-07}
+{"test":"Q2-MASS","name":"lemon (spindle torus, poles)","route":"analytic boundary integral","dV":9.947598300641403E-14,"eV":1.0075427141134867E-05,"dC":1.423479087580704E-16,"eC":5.914020903937694E-07,"dJ":2.2737367544323206E-13,"eJ":0.0008502454647111135,"relJ":2.463943144224211E-06}
+{"test":"Q2-MASS","name":"lemon (spindle torus, poles) (rotated, moved)","route":"analytic boundary integral","dV":9.947598300641403E-14,"eV":1.0075427141134863E-05,"dC":0,"eC":5.79180322080926E-07,"dJ":4.263256414560601E-14,"eJ":0.0008154666597712322,"relJ":2.3683499035558884E-06}
+{"test":"Q2-MASS","name":"apple (spindle torus, poles)","route":"analytic boundary integral","dV":3.979039320256561E-13,"eV":3.052325229110694E-05,"dC":1.6830950192560467E-16,"eC":5.222900425645089E-07,"dJ":4.001776687800884E-11,"eJ":0.006363081075635737,"relJ":1.224312902891448E-06}
+{"test":"Q2-MASS","name":"apple (spindle torus, poles) (rotated, moved)","route":"analytic boundary integral","dV":3.979039320256561E-13,"eV":3.052325229110688E-05,"dC":0,"eC":5.295579034077791E-07,"dJ":5.093170329928398E-11,"eJ":0.006541402502758087,"relJ":1.2790782429324175E-06}
+{"test":"Q2-MASS","name":"plate 60\u00D740\u00D720 with hole r8","route":"analytic boundary integral","dV":7.275957614183426E-12,"eV":0.0009843565622668115,"dC":2.2606539957242026E-13,"eC":8.579441741988987E-07,"dJ":1.7881393432617188E-07,"eJ":4.33882927637377,"relJ":2.1444926379431655E-07}
+{"test":"Q2-MASS","name":"plate 60\u00D740\u00D720 with hole r8 (rotated, moved)","route":"analytic boundary integral","dV":1.4551915228366852E-11,"eV":0.0009843565622668115,"dC":3.6869996830933636E-13,"eC":1.219626251728302E-06,"dJ":7.82310962677002E-08,"eJ":8.768150603470357,"relJ":4.5691791861368427E-07}
+{"test":"Q2-MASS","name":"box 80\u00D780\u00D740 minus half-buried torus R20 r6","route":"refined mesh of analytic faces (\u00D74^3)","dV":2.9103830456733704E-11,"eV":0.0029227655346366135,"dC":1.9924248940818173E-05,"eC":0.0002524584966279276,"dJ":174.3196474313736,"eJ":6371.371264054214,"relJ":2.359484385677516E-05}
+{"test":"Q2-MASS","name":"box 80\u00D780\u00D740 minus half-buried torus R20 r6 (rotated, moved)","route":"refined mesh of analytic faces (\u00D74^3)","dV":2.0372681319713593E-10,"eV":0.0029227655520180683,"dC":1.9924248981079417E-05,"eC":0.00025245852459583937,"dJ":174.08451789617538,"eJ":6371.374373945353,"relJ":2.4648358505673436E-05}
+{"test":"Q2-MASS-PROPERTIES-BOUNDS","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":1,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":5,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":4,"failed":0}

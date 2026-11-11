@@ -225,6 +225,29 @@ public static class SweepOp
     }
     static readonly bool HelixScrewOff = Environment.GetEnvironmentVariable("P3D_HELIXSCREW") == "0";
 
+    /// <summary>
+    /// ПРОТЯЖКА ПО ЗАКОНУ РАМКИ (резьба): сечение переносится рамкой law(s), s ∈ [0, 1] — начало и оси U, V плоскости
+    /// сечения в мире; law(0) — плоскость самого сечения. Винтовое движение с добавками (конусность, плавный выход — сдвиг
+    /// по радиусу) задаёт вызывающий. Точно (грани по формуле сечения); иначе — многогранно по steps + 1 рамкам.
+    /// </summary>
+    public static TSolid BuildByLaw(Profile section, Func<double, (Vector3d O, Vector3d U, Vector3d V)> law, int steps)
+    {
+        if (section.IsEmpty) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: the section is empty or not closed.");
+        var pl = section.Plane;
+        var smp = section.Outers.SelectMany(l => { var p3 = new List<Vector3d>(); foreach (var c in l.Curves) c.Tessellate(p3, true); return p3; }).ToList();
+        var cen = smp.Count > 0 ? smp.Aggregate(Vector3d.Zero, (acc, q) => acc + q) / smp.Count : pl.Origin;
+        var cl = pl.ToLocal2(cen);
+        var path = new ProcCurve3(s => { var f = law(s); return f.O + f.U * cl.X + f.V * cl.Y; }, 0, 1, false, "thread helix");
+        string? why = null;
+        var ex = DirectRound.ExactSweep(section, path, 1, 0, false, law, ref why);
+        if (ex != null) return ex;
+        DirectRound.Debug?.Invoke("law sweep: exact declined: " + why);
+        int n = Math.Max(16, steps);
+        var frames = new List<Frame3>(n + 1);
+        for (int k = 0; k <= n; k++) { var f = law((double)k / n); frames.Add(new Frame3(f.O, f.U, f.V)); }
+        return Polyhedral(section, frames, false);
+    }
+
     static readonly bool PolyOff = Environment.GetEnvironmentVariable("P3D_SWEEPPOLY") == "0";
     static readonly bool ClearOff = Environment.GetEnvironmentVariable("P3D_SWEEPCLEAR") == "0";
 

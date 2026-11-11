@@ -262,45 +262,7 @@ public sealed class PointsPatternFeature : Feature
     }
 }
 
-/// <summary>
-/// КОСМЕТИЧЕСКАЯ РЕЗЬБА: обозначение резьбы на круглой грани (наружной или в отверстии) — диаметр, шаг, длина; тело не
-/// меняется. Проверяется, что грань цилиндрическая; диаметр и вид (наружная/внутренняя) берутся с грани.
-/// </summary>
-public sealed class CosmeticThreadFeature : Feature
-{
-    public readonly List<Vector3d> OnFaces = new();
-    public readonly List<string?> OnFaceNames = new();
-    public ValueRef Pitch = new(1.5);
-    /// <summary>Длина резьбы; 0 — во всю грань.</summary>
-    public ValueRef Length = new(0);
-    /// <summary>Найдено при перестроении: диаметр грани, внутренняя ли резьба, ось.</summary>
-    public double Diameter { get; private set; }
-    public bool Internal { get; private set; }
-    public Vector3d AxisAt { get; private set; }
-    public Vector3d AxisDir { get; private set; }
-    public CosmeticThreadFeature(string name = "Thread") { Name = name; }
-    public override string Summary => $"Thread {(Internal ? "M" : "")}{Diameter:0.##}x{Pitch}";
-
-    public override void Execute(BuildContext ctx)
-    {
-        if (ctx.Bodies.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: no body.");
-        if (OnFaces.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: no face selected.");
-        var f = FacePick.Resolve(ctx.Bodies[0], OnFaces, OnFaceNames, "Thread")[0];
-        var srf = GeometryAudit.AuthoritativeSurface(f);
-        (Vector3d O, Vector3d W)? axis = srf switch
-        {
-            Kernel.Surfaces.CylinderSurface cs => (cs.Axis.Origin, cs.Axis.W.Normalized()),
-            Kernel.Surfaces.ExtrudedSurface { Base: Kernel.Curves.ArcCurve3 ba } es when Math.Abs(Math.Abs(Vector3d.Dot(ba.Frame.W.Normalized(), es.Dir.Normalized())) - 1) < 1e-9 => (ba.Frame.Origin, es.Dir.Normalized()),
-            _ => null,
-        };
-        if (axis == null || DirectEdit.RadiusAfter(f, 0) is not { } r0 || DirectEdit.RadiusAfter(f, 1) is not { } r1)
-            throw new RebuildException(OperationOutcome.InvalidInput, "Thread: the face is not cylindrical.");
-        if (!(Pitch.Resolve(ctx.Parameters) > Tol.Weld)) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: the pitch must be positive.");
-        Diameter = 2 * r0;
-        AxisAt = axis.Value.O; AxisDir = axis.Value.W;
-        Internal = r1 < r0;
-    }
-}
+// КОСМЕТИЧЕСКАЯ И НАСТОЯЩАЯ РЕЗЬБА (CosmeticThreadFeature) — в ThreadFeature*.cs.
 
 /// <summary>
 /// ПОЛНОЕ СКРУГЛЕНИЕ: средняя грань между двумя параллельными боковыми заменяется полуцилиндром, касательным к обеим
