@@ -5,16 +5,16 @@ using Parametric3D.Kernel.Topology;
 namespace Parametric3D.Kernel.Ops;
 
 /// <summary>
-/// A single-start external trapezoidal groove, with radial tool withdrawal, on a round blank.
+/// A single-start external trapezoidal groove, with optional radial tool withdrawal, on a round blank.
 /// Repeated axial cells and a separately constructed nonperiodic ending; no whole-length Boolean.
 /// </summary>
 public static class ThreadRunoutOp
 {
     public static TSolid Build(Frame3 frame, double lead, double height, double length,
-        double radius, IReadOnlyList<Vector2d> profile, bool left)
+        double radius, IReadOnlyList<Vector2d> profile, bool left, bool smoothExit = true)
     {
-        var law = new ThreadRunoutLaw(frame, lead, height, length, radius, profile, left);
-        int count = Math.Max(0, (int)Math.Floor((law.Start + law.LeftBase) / lead + 1e-10));
+        var law = new ThreadRunoutLaw(frame, lead, height, length, radius, profile, left, smoothExit);
+        int count = Math.Max(0, (int)Math.Floor((smoothExit ? law.Start + law.LeftBase : height) / lead + 1e-10));
         double prefix = count * lead;
         // The same phase partition in both builders makes the seam an identical edge cycle.
         var phases = law.Phases(prefix);
@@ -25,7 +25,7 @@ public static class ThreadRunoutOp
             return DirectRound.ThreadCell(law, a, b, full, phases, ref why)
                 ?? throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: " + why);
         }
-        if (count == 0) return Cell(0, height, false);
+        if (count == 0) return Cell(0, height, !smoothExit);
         var seed = Cell(0, lead, true);
         var measure = AnalyticVolume.OfWithError(seed)
             ?? throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: no seed volume.");
@@ -39,11 +39,14 @@ public static class ThreadRunoutOp
                 ?? throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: translation refused.");
             PeriodicSweepOp.Join(result, copy);
         }
-        var end = Cell(prefix, height, false);
-        var endMeasure = AnalyticVolume.OfWithError(end)
-            ?? throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: no ending volume.");
-        volume += endMeasure.Volume; error += endMeasure.QuadratureError;
-        PeriodicSweepOp.Join(result, end);
+        if (height - prefix > 1e-10)
+        {
+            var end = Cell(prefix, height, !smoothExit);
+            var endMeasure = AnalyticVolume.OfWithError(end)
+                ?? throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: no ending volume.");
+            volume += endMeasure.Volume; error += endMeasure.QuadratureError;
+            PeriodicSweepOp.Join(result, end);
+        }
         result.Guarantee = GuaranteeLevel.ExactAnalytic;
         result.TopologyConvention = TopologyConventions.Version;
         foreach (var v in result.Vertices) v.Edges.Clear();
@@ -55,7 +58,7 @@ public static class ThreadRunoutOp
         AnalyticVolume.RememberComposition(result, volume, error);
         var report = SolidValidator.Validate(result);
         if (!report.IsValid)
-            throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: invalid seam: " + report.Summary());
+            throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: invalid seam: " + report);
         if (BooleanOp.VolumeVsFacets(result) is { Agree: false })
             throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: display/boundary volume mismatch.");
         return result;
@@ -69,16 +72,18 @@ internal sealed class ThreadRunoutLaw
     internal readonly double Lead, Height, Radius, Root, Q0, Q1, ML, MR, Depth, Start, End, Span, Omega;
     internal double LeftBase => Q0 + Depth / ML;
     internal double RightBase => Q1 + Depth / MR;
-    internal readonly bool Left;
+    internal readonly bool Left, SmoothExit;
 
     internal ThreadRunoutLaw(Frame3 frame, double lead, double height, double length, double radius,
-        IReadOnlyList<Vector2d> profile, bool left)
+        IReadOnlyList<Vector2d> profile, bool left, bool smoothExit = true)
     {
         if (!(lead > 0 && height >= length && length > 0 && radius > 0)
             || !double.IsFinite(lead + height + length + radius) || height / lead > 10000
             || profile.Count != 4 || profile.Any(p => !double.IsFinite(p.X + p.Y)))
             throw new RebuildException(OperationOutcome.InvalidInput, "Thread run-out: invalid blank or trapezoid.");
-        Frame = frame; Lead = lead; Height = height; Radius = radius; Left = left;
+        Frame = frame; Lead = lead; Height = height; Radius = radius; Left = left; SmoothExit = smoothExit;
+        if (!smoothExit && Math.Abs(length - height) > 1e-9)
+            throw new RebuildException(OperationOutcome.Unsupported, "Thread: an abrupt partial-length ending requires a separate end cut.");
         var p = profile.OrderBy(x => x.Y).ThenBy(x => x.X).ToArray();
         Root = p[0].Y; Q0 = p[0].X; Q1 = p[1].X;
         if (Math.Abs(p[1].Y - Root) > 1e-12 || Math.Abs(p[2].Y - p[3].Y) > 1e-12
@@ -93,7 +98,7 @@ internal sealed class ThreadRunoutLaw
         Span = Math.Min(lead, length + LeftBase - Q1);
         // This bound proves t+qRight(t) is strictly monotone throughout the cubic withdrawal.
         // Together with nonoverlapping turns it rules out folds and permits bracketed cap roots.
-        if (Span <= 1.5 * Depth / MR * (1 + 1e-8))
+        if (smoothExit && Span <= 1.5 * Depth / MR * (1 + 1e-8))
             throw new RebuildException(OperationOutcome.InvalidInput, "Thread run-out: length is too short for a nonfolding smooth exit.");
         Start = End - Span;
         Omega = (left ? -1 : 1) * 2 * Math.PI / lead;
@@ -101,7 +106,7 @@ internal sealed class ThreadRunoutLaw
 
     internal (double D, double Derivative) Offset(double t, bool full)
     {
-        if (full || t <= Start) return (0, 0);
+        if (!SmoothExit || full || t <= Start) return (0, 0);
         if (t >= End) return (Depth, 0);
         double s = (t - Start) / Span;
         return (Depth * s * s * (3 - 2 * s), Depth * 6 * s * (1 - s) / Span);
@@ -124,7 +129,8 @@ internal sealed class ThreadRunoutLaw
 
     internal double[] Phases(double prefix)
     {
-        var values = new List<double> { 0, Lead / 4, Lead / 2, 3 * Lead / 4, Start, End };
+        var values = new List<double> { 0, Lead / 4, Lead / 2, 3 * Lead / 4 };
+        if (SmoothExit) { values.Add(Start); values.Add(End); }
         foreach (double z in new[] { 0.0, Lead, prefix, Height })
             foreach (bool full in new[] { true, false })
                 for (int id = 0; id < 5; id++)

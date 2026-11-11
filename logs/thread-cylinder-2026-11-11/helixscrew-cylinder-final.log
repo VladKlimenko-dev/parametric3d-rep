@@ -1,0 +1,8 @@
+{"runtime":".NET 10.0.12","cpu":2,"os":"Ubuntu 26.04 LTS","args":["helixscrew"]}
+{"test":"KRN07-HELIX-SCREW","name":"right","guarantee":"ExactAnalytic","v":"18472.564802796027","want":18472.564803107984,"faces":6,"valid":"BRep: ok; Mesh: ok"}
+{"test":"KRN07-HELIX-SCREW","name":"left","guarantee":"ExactAnalytic","v":"18472.564802796027","want":18472.564803107984,"faces":6,"valid":"BRep: ok; Mesh: ok"}
+{"test":"KRN07-HELIX-SCREW","name":"flip","guarantee":"ExactAnalytic","v":"18472.564802795485","want":18472.564803107984,"faces":6,"valid":"BRep: ok; Mesh: ok"}
+{"test":"KRN07-HELIX-SCREW","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":1,"failed":0}

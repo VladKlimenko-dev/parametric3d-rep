@@ -48,7 +48,7 @@ static partial class Program
         });
         Check("THREAD-CATALOG-PREVIEW", () =>
         {
-            long before = DirectRound.ExactSweeps;
+            long before = DirectRound.ExactSweeps + DirectRound.ExactThreadCells;
             foreach (var row in ThreadDb.All)
                 foreach (bool inner in new[] { false, true })
                 {
@@ -57,7 +57,7 @@ static partial class Program
                     Require(lines.Count > 0 && lines.Count <= 6100, "catalog preview line budget: " + row.Id);
                     Require(lines.All(l => double.IsFinite(l.A.Length + l.B.Length)), "non-finite preview: " + row.Id);
                 }
-            Require(DirectRound.ExactSweeps == before, "preview built exact sweeps");
+            Require(DirectRound.ExactSweeps + DirectRound.ExactThreadCells == before, "preview built exact cells");
         });
         Check("THREAD-SHORT-EXIT-REFUSAL-ATOMIC", () =>
         {
@@ -125,9 +125,9 @@ static partial class Program
                 ctx.Bodies.Add(body);
                 var f = new CosmeticThreadFeature { TypeId = spec.Id, Cosmetic = false, Length = length, LeftHand = left };
                 f.OnFaces.Add(new Vector3d(3, 0, length / 2));
-                long before = DirectRound.ExactSweeps;
+                long before = DirectRound.ExactSweeps + DirectRound.ExactThreadCells;
                 var sw = Stopwatch.StartNew(); f.Execute(ctx); double ms = sw.Elapsed.TotalMilliseconds;
-                long built = DirectRound.ExactSweeps - before;
+                long built = DirectRound.ExactSweeps + DirectRound.ExactThreadCells - before;
                 Require(built == (length > spec.Lead && length % spec.Lead > 1e-10 ? 2 : 1), "periodic cells rebuilt instead of copied");
                 var result = ctx.Bodies.Single();
                 Require(f.LastRoute == "direct-screw" && result.Guarantee == GuaranteeLevel.ExactAnalytic, "not exact direct solid");

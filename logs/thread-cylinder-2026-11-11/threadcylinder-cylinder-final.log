@@ -1,0 +1,24 @@
+{"runtime":".NET 10.0.12","cpu":2,"os":"Ubuntu 26.04 LTS","args":["threadcylinder"]}
+{"test":"THREAD-CYLINDER-START","diameter":10,"height":200,"exit":false,"P":1.5,"inputFaces":3,"surfaces":["ExtrudedSurface","PlaneSurface","PlaneSurface"]}
+{"test":"THREAD-CYLINDER-METRICS","diameter":10,"height":200,"exit":false,"P":1.5,"ms":12589.1633,"LastRoute":"direct-screw","volume":12910.7557334698,"expected":12910.755733469847,"built":2,"faces":7340}
+{"test":"THREAD-CYLINDER-M10-H200-EXITFalse","ok":true}
+{"test":"THREAD-CYLINDER-START","diameter":10,"height":200,"exit":true,"P":1.5,"inputFaces":3,"surfaces":["ExtrudedSurface","PlaneSurface","PlaneSurface"]}
+{"test":"THREAD-CYLINDER-METRICS","diameter":10,"height":200,"exit":true,"P":1.5,"ms":12584.9544,"LastRoute":"direct-runout","volume":12924.70103600018,"expected":12924.701035913591,"built":2,"faces":7316}
+{"test":"THREAD-CYLINDER-M10-H200-EXITTrue","ok":true}
+{"test":"THREAD-CYLINDER-START","diameter":20,"height":200,"exit":false,"P":2.5,"inputFaces":3,"surfaces":["ExtrudedSurface","PlaneSurface","PlaneSurface"]}
+{"test":"THREAD-CYLINDER-METRICS","diameter":20,"height":200,"exit":false,"P":2.5,"ms":5104.0733,"LastRoute":"direct-screw","volume":53389.6846239504,"expected":53389.684623951856,"built":1,"faces":3202}
+{"test":"THREAD-CYLINDER-M20-H200-EXITFalse","ok":true}
+{"test":"THREAD-CYLINDER-START","diameter":20,"height":200,"exit":true,"P":2.5,"inputFaces":3,"surfaces":["ExtrudedSurface","PlaneSurface","PlaneSurface"]}
+{"test":"THREAD-CYLINDER-METRICS","diameter":20,"height":200,"exit":true,"P":2.5,"ms":4965.55,"LastRoute":"direct-runout","volume":53468.26545042748,"expected":53468.2654502516,"built":2,"faces":3192}
+{"test":"THREAD-CYLINDER-M20-H200-EXITTrue","ok":true}
+{"test":"THREAD-CYLINDER-START","diameter":20,"height":20,"exit":false,"P":2.5,"inputFaces":3,"surfaces":["ExtrudedSurface","PlaneSurface","PlaneSurface"]}
+{"test":"THREAD-CYLINDER-METRICS","diameter":20,"height":20,"exit":false,"P":2.5,"ms":666.0573,"LastRoute":"direct-screw","volume":5338.968462395081,"expected":5338.968462395186,"built":1,"faces":322}
+{"test":"THREAD-CYLINDER-M20-H20-EXITFalse","ok":true}
+{"test":"THREAD-CYLINDER-START","diameter":20,"height":20,"exit":true,"P":2.5,"inputFaces":3,"surfaces":["ExtrudedSurface","PlaneSurface","PlaneSurface"]}
+{"test":"THREAD-CYLINDER-METRICS","diameter":20,"height":20,"exit":true,"P":2.5,"ms":719.7893,"LastRoute":"direct-runout","volume":5417.549288871563,"expected":5417.549288872505,"built":2,"faces":312}
+{"test":"THREAD-CYLINDER-M20-H20-EXITTrue","ok":true}
+{"test":"THREAD-PERIODIC-GENERAL-False","ok":true}
+{"test":"THREAD-PERIODIC-GENERAL-True","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":8,"failed":0}

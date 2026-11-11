@@ -633,7 +633,13 @@ public static partial class ExactFaceMesher
             if (len < 2e-3 && l2 > 0 && pts.Skip(1).Take(pts.Count - 2).All(q => (pts[0] + d * (Vector3d.Dot(q - pts[0], d) / l2) - q).Length <= Core.Tol.Chord / 10))
                 pts = new List<Vector3d> { pts[0], pts[^1] };
         }
-        if (!CuspOff && (!ReferenceEquals(e.V0, e.V1) || !CuspClosedOff)) pts = DensifyAtCusps(e, pts);
+        // A shallow helix is not a cusp: e.g. M10/M20 crosses the end plane at <3°.
+        // These certified ruled thread patches have their own pinched-end mesher,
+        // with orientation/chord checks. Asymmetric heuristic cusp samples instead
+        // introduce slivers and give opposite periodic caps different subdivisions.
+        bool threadRail = e.Curve is Kernel.Curves.ProcCurve3 { Kind: "thread boundary" }
+            && e.CoEdges.Any(ce => ce.Loop?.Face?.Tag?.StartsWith("sweep:side[thread.") == true);
+        if (!threadRail && !CuspOff && (!ReferenceEquals(e.V0, e.V1) || !CuspClosedOff)) pts = DensifyAtCusps(e, pts);
         e.PolylineCache = pts;
         e.PolylineQuality = want;
         e.PolylineSource = source;

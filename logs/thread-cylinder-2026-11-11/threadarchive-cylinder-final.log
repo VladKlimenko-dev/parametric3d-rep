@@ -1,0 +1,10 @@
+{"runtime":".NET 10.0.12","cpu":2,"os":"Ubuntu 26.04 LTS","args":["threadarchive"]}
+{"test":"THREAD-ARCHIVE-JSON","ok":true}
+{"test":"THREAD-ARCHIVE-INCOMPLETE-ROW","ok":true}
+{"test":"THREAD-ARCHIVE-ROUNDTRIP","ok":true}
+{"test":"THREAD-ARCHIVE-DEFAULTS","ok":true}
+{"test":"THREAD-ARCHIVE-CATALOG-PARALLEL","ok":true}
+{"test":"THREAD-ARCHIVE-CATALOG-READONLY","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":6,"failed":0}

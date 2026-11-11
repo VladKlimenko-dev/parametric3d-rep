@@ -66,8 +66,9 @@ $stages = @(
     @{ Name = 'allC'; Args = @('allC') },
     @{ Name = 'thread'; Args = @('threadchecks') },
     @{ Name = 'threadexit'; Args = @('threadexit') },
+    @{ Name = 'threadcylinder'; Args = @('threadcylinder') },
     @{ Name = 'seq';  Args = @('loftseq', '10', '101', '6', (Join-Path $logs 'seq')) }
-) | Where-Object { $Only -eq '' -or $_.Name -eq $Only -or ($Only -eq 'thread' -and $_.Name -eq 'threadexit') -or ($Only -eq 'abc' -and $_.Name -in @('allA', 'allB', 'allC')) }
+) | Where-Object { $Only -eq '' -or $_.Name -eq $Only -or ($Only -eq 'thread' -and $_.Name -in @('threadexit', 'threadcylinder')) -or ($Only -eq 'abc' -and $_.Name -in @('allA', 'allB', 'allC')) }
 
 $t0 = Get-Date
 $exitCodes = @{}

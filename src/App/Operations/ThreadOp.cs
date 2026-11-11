@@ -49,7 +49,7 @@ public sealed partial class CosmeticThreadOp : FeatureOp<CosmeticThreadFeature>
         if (Editing && F.EndAt != null) _end.Kept = 1;
         p.Number("Длина резьбы", ShownLength, SetLength, enabled: () => F.Mode == ThreadLength.Blind, scrub: 1);
         p.Check("Плавный выход", () => F.SmoothExit, v => F.SmoothExit = v, enabled: () => !F.Cosmetic,
-            tip: "Показывает траекторию выхода. Точное тело с плавным выходом пока не поддержано: ОК выдаст отказ без изменения детали.");
+            tip: "Точный плавный выход наружной однозаходной трапециевидной резьбы на отдельном цилиндре. Длина включает выход; остальные случаи отклоняются без изменения детали.");
         p.Check("Левая", () => F.LeftHand, v => F.LeftHand = v);
         p.Note("Предпросмотр — винтовая линия и профиль, без выреза тела. Точный вырез — после ОК.");
         p.Note("Резец заходит до начала участка с плавным врезанием. Длина 0 — вся грань.");

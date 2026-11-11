@@ -1,6 +1,7 @@
 using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Topology;
+using Parametric3D.Kernel.Tess;
 
 namespace Parametric3D.Kernel.Ops;
 
@@ -83,6 +84,7 @@ public static class PeriodicSweepOp
         var edges = new Dictionary<TEdge, (TEdge Edge, bool Reverse)>();
         var vertices = new Dictionary<TVertex, TVertex>();
         var used = new HashSet<TEdge>();
+        var remesh = new HashSet<TFace>();
         bool Near(Vector3d p, Vector3d q) => (p - q).Length <= 1e-7;
         foreach (var e in be)
         {
@@ -99,6 +101,15 @@ public static class PeriodicSweepOp
                 if (!Near(p, q)) throw new RebuildException(OperationOutcome.Unsupported, "Periodic sweep: incompatible seam parameterization.");
             }
             edges.Add(e, (match, reverse)); used.Add(match);
+            var oldSamples = ExactFaceMesher.EdgePoints(e);
+            var newSamples = ExactFaceMesher.EdgePoints(match);
+            bool SameDisplayPoint(Vector3d p, Vector3d q) =>
+                (float)p.X == (float)q.X && (float)p.Y == (float)q.Y && (float)p.Z == (float)q.Z;
+            bool sameSamples = oldSamples.Count == newSamples.Count
+                && oldSamples.Select((p, i) => SameDisplayPoint(p, newSamples[reverse ? newSamples.Count - 1 - i : i])).All(same => same);
+            if (!sameSamples)
+                foreach (var ce in e.CoEdges)
+                    if (ce.Loop?.Face is { } face && !ReferenceEquals(face, b)) remesh.Add(face);
             vertices[e.V0] = reverse ? match.V1 : match.V0;
             vertices[e.V1] = reverse ? match.V0 : match.V1;
         }
@@ -112,6 +123,11 @@ public static class PeriodicSweepOp
         {
             if (vertices.TryGetValue(e.V0, out var v0)) e.V0 = v0;
             if (vertices.TryGetValue(e.V1, out var v1)) e.V1 = v1;
+            if (e.PolylineCache is { Count: >= 2 } samples)
+            {
+                samples[0] = e.V0.P; samples[^1] = e.V1.P;
+                e.PolylineSource = (e.Curve, e.V0.P, e.V1.P);
+            }
         }
         foreach (var f in right.Faces.ToArray())
         {
@@ -123,6 +139,9 @@ public static class PeriodicSweepOp
                 }
             left.Shells[0].Add(f);
         }
+        foreach (var face in remesh)
+            if (!ExactFaceMesher.RefreshSweepDisplay(face))
+                throw new RebuildException(OperationOutcome.Unsupported, "Periodic sweep: seam display could not be reconciled.");
         left.DisplayMeshKey = null;
     }
 }

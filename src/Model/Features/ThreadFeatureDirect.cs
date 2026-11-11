@@ -13,8 +13,9 @@ public sealed partial class CosmeticThreadFeature
     /// <summary>
     /// Full-length external thread on an isolated circular cylinder. Build its screw boundary
     /// directly, without subtracting a self-overlapping helical tool. Other bodies use strict Boolean.
-    /// Circular crests stay exact arcs. Spiral sections are degree-7 Hermite curves bounded to
-    /// 1e-8 mm (or a tenth of model accuracy); no display facets become modelling geometry.
+    /// Single-start trapezoids use analytic ruled thread strips with or without withdrawal.
+    /// The general-profile fallback uses circular crests and degree-7 Hermite sections bounded
+    /// to 1e-8 mm (or a tenth of model accuracy); display facets never become modelling geometry.
     /// </summary>
     private static TSolid? DirectCylinder(TSolid body, TFace selected, ThreadSpec spec, bool inner,
         Vector3d b0, Vector3d axis, Vector3d radial, double len, double faceLength, double radius,
@@ -43,6 +44,9 @@ public sealed partial class CosmeticThreadFeature
             if (spec.Starts != 1 || Math.Abs(lead - spec.P) > 1e-9) return null;
             return ThreadRunoutOp.Build(frame, lead, faceLength, len, radius, spec.ExtZr, left);
         }
+        if (spec.Starts == 1 && Math.Abs(lead - spec.P) < 1e-9
+            && spec.ExtZr.Length == 4 && spec.ExtZr.Select(p => p.Y).Distinct().Count() == 2)
+            return ThreadRunoutOp.Build(frame, lead, faceLength, len, radius, spec.ExtZr, left, smoothExit: false);
         var profile = ThreadSection(spec, radius, frame, left);
         return PeriodicSweepOp.Build(profile, lead, len, left);
     }

@@ -194,7 +194,20 @@ public static class TopologyTransform
         }
         dst.BeginEdit("TopologyTransform", EditKind.Derive);
         foreach (var v in dst.Vertices) v.P = x.Point(v.P);
-        foreach (var e in dst.Edges) { e.Curve = C(e.Curve)!; e.PolylineCache = null; }
+        foreach (var e in dst.Edges)
+        {
+            bool currentSamples = translation && ReferenceEquals(e.PolylineSource.Curve, e.Curve)
+                && x.Point(e.PolylineSource.P0) == e.V0.P && x.Point(e.PolylineSource.P1) == e.V1.P;
+            e.Curve = C(e.Curve)!;
+            // A periodic copy keeps its sampled boundary as well as its display triangles.
+            // Resampling independently can choose different cusp subdivisions at either cap.
+            if (translation && currentSamples && e.PolylineCache is { } samples)
+            {
+                e.PolylineCache = samples.Select(x.Point).ToList();
+                e.PolylineSource = (e.Curve, e.V0.P, e.V1.P);
+            }
+            else e.PolylineCache = null;
+        }
         foreach (var f in dst.Faces)
         {
             if (f.Surface is FacetedSurface fs)

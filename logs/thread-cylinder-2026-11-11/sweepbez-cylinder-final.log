@@ -1,0 +1,10 @@
+{"runtime":".NET 10.0.12","cpu":2,"os":"Ubuntu 26.04 LTS","args":["sweepbez"]}
+  lens × bezier S: V 291.1896259111695 want 291.1896258476749 (2.2E-010) ExactAnalytic, 4 faces
+  lens × bezier 3D: V 377.4096663458249 want 377.4096662451731 (2.7E-010) ExactAnalytic, 4 faces
+  lens × bezier S, twist 180°: V 291.18962590648096 want 291.1896258476749 (2.0E-010) ExactAnalytic, 4 faces
+  D × bezier S, kept orientation: V 383.9999999916119 want 383.9999999089905 (2.2E-010) ExactAnalytic, 4 faces
+  spline drop × bezier S, kept orientation: V 649.9999999906765 want 649.9999998375445 (2.4E-010) ExactAnalytic, 5 faces
+{"test":"KRN07-SWEEP-BEZIER-SECTION","ok":true}
+{"staleExactUses":0}
+{"sewSplits":0,"sewMerges":0,"buildSplits":0,"buildMerges":0,"lateSew":0,"openLoopsMerged":0,"vertexMergedByDistance":0,"vertexMergedFar":0,"nodeMergedFar":0,"cutFar":0,"rigorousEvents":0,"rigorousUncertain":0,"tracedEvents":0,"tracedUncertain":0,"sampledEdges":0}
+{"passed":1,"failed":0}
