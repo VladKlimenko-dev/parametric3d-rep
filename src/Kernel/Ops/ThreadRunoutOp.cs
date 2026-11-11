@@ -11,12 +11,13 @@ namespace Parametric3D.Kernel.Ops;
 public static class ThreadRunoutOp
 {
     public static TSolid Build(Frame3 frame, double lead, double height, double length,
-        double radius, IReadOnlyList<Vector2d> profile, bool left, bool smoothExit = true)
+        double radius, IReadOnlyList<Vector2d> profile, bool left, bool smoothExit = true, double taper = 0, double crest = double.PositiveInfinity)
     {
-        var law = new ThreadRunoutLaw(frame, lead, height, length, radius, profile, left, smoothExit);
+        var law = new ThreadRunoutLaw(frame, lead, height, length, radius, profile, left, smoothExit, taper, crest);
         bool partial = length < height - 1e-9;
         // Abrupt partial ending: copied cells stay strictly below the stop plane z = length.
-        int count = Math.Max(0, smoothExit ? (int)Math.Floor((law.Start + law.LeftBase) / lead + 1e-10)
+        // A tapered groove is not translation-periodic: one directly built cell, no copies.
+        int count = taper > 0 ? 0 : Math.Max(0, smoothExit ? (int)Math.Floor((law.Start + law.LeftBase) / lead + 1e-10)
             : partial ? (int)Math.Ceiling(length / lead - 1e-10) - 1 : (int)Math.Floor(height / lead + 1e-10));
         double prefix = count * lead;
         // The same phase partition in both builders makes the seam an identical edge cycle.
@@ -79,15 +80,19 @@ internal sealed class ThreadRunoutLaw
     internal double LeftBase => Q0 + Depth / ML;
     internal double RightBase => Q1 + Depth / MR;
     internal readonly bool Left, SmoothExit;
+    /// <summary>Radial growth per unit of tool travel (tan of the half cone angle), as in ToolFrame.</summary>
+    internal readonly double Taper;
+    /// <summary>Crest-cone radius at z = 0 (tapered threads); +inf — the crest is the blank itself.</summary>
+    internal readonly double Crest0;
 
     internal ThreadRunoutLaw(Frame3 frame, double lead, double height, double length, double radius,
-        IReadOnlyList<Vector2d> profile, bool left, bool smoothExit = true)
+        IReadOnlyList<Vector2d> profile, bool left, bool smoothExit = true, double taper = 0, double crest = double.PositiveInfinity)
     {
-        if (!(lead > 0 && height >= length && length > 0 && radius > 0)
+        if (!(crest > 0) || !(taper >= 0 && taper < 0.2) || !(lead > 0 && height >= length && length > 0 && radius > 0)
             || !double.IsFinite(lead + height + length + radius) || height / lead > 10000
             || profile.Count != 4 || profile.Any(p => !double.IsFinite(p.X + p.Y)))
             throw new RebuildException(OperationOutcome.InvalidInput, "Thread run-out: invalid blank or trapezoid.");
-        Frame = frame; Lead = lead; Height = height; Radius = radius; Left = left; SmoothExit = smoothExit;
+        Frame = frame; Lead = lead; Height = height; Radius = radius; Left = left; SmoothExit = smoothExit; Taper = taper; Crest0 = crest;
         var p = profile.OrderBy(x => x.Y).ThenBy(x => x.X).ToArray();
         Root = p[0].Y; Q0 = p[0].X; Q1 = p[1].X;
         if (Math.Abs(p[1].Y - Root) > 1e-12 || Math.Abs(p[2].Y - p[3].Y) > 1e-12
@@ -96,13 +101,14 @@ internal sealed class ThreadRunoutLaw
         ML = (p[2].Y - Root) / (p[2].X - Q0);
         MR = (p[3].Y - Root) / (p[3].X - Q1);
         Depth = radius - Root;
-        if (RightBase - LeftBase >= lead - 1e-9)
+        double c0 = Math.Min(radius, crest);
+        if (!(c0 > Root) || Q1 + (c0 - Root) / MR - Q0 - (c0 - Root) / ML >= lead - 1e-9)
             throw new RebuildException(OperationOutcome.InvalidInput, "Thread run-out: adjacent grooves overlap.");
         End = length - Q1;
         Span = Math.Min(lead, length + LeftBase - Q1);
         // This bound proves t+qRight(t) is strictly monotone throughout the cubic withdrawal.
         // Together with nonoverlapping turns it rules out folds and permits bracketed cap roots.
-        if (smoothExit && Span <= 1.5 * Depth / MR * (1 + 1e-8))
+        if (smoothExit && Span <= 1.5 * Depth / (MR - taper) * (1 + 1e-8) || taper >= MR || taper >= -ML)
             throw new RebuildException(OperationOutcome.InvalidInput, "Thread run-out: length is too short for a nonfolding smooth exit.");
         Start = End - Span;
         Omega = (left ? -1 : 1) * 2 * Math.PI / lead;
@@ -110,24 +116,41 @@ internal sealed class ThreadRunoutLaw
 
     internal (double D, double Derivative) Offset(double t, bool full)
     {
-        if (!SmoothExit || full || t <= Start) return (0, 0);
-        if (t >= End) return (Depth, 0);
-        double s = (t - Start) / Span;
-        return (Depth * s * s * (3 - 2 * s), Depth * 6 * s * (1 - s) / Span);
+        (double D, double Derivative) d = (0, 0);
+        if (SmoothExit && !full && t > Start)
+        {
+            if (t >= End) d = (Depth, 0);
+            else { double s = (t - Start) / Span; d = (Depth * s * s * (3 - 2 * s), Depth * 6 * s * (1 - s) / Span); }
+        }
+        if (Taper == 0) return d;
+        // Taper raises the whole tool section; once it reaches the blank the groove has vanished.
+        d = (d.D + Taper * t, d.Derivative + Taper);
+        return d.D >= Depth ? (Depth, 0) : d;
+    }
+
+    /// <summary>Crest radius of the turn at tool parameter t: the truncation cone raised with the tool, at most the blank.</summary>
+    internal (double R, double Derivative) Crest(double t, bool full)
+    {
+        if (!double.IsFinite(Crest0)) return (Radius, 0);
+        var d = Offset(t, full);
+        double c = Crest0 + d.D;
+        return c >= Radius ? (Radius, 0) : (c, d.Derivative);
     }
 
     // 0: left intersection with the blank, 1/2: root corners, 3: right intersection,
     // 4: left intersection of the NEXT turn, the other boundary of the cylindrical crest.
     internal (double Q, double Derivative) Boundary(int id, double t, bool full)
     {
-        var d = Offset(t + (id == 4 ? Lead : 0), full);
+        if (id == 4) { var next = Boundary(0, t + Lead, full); return (Lead + next.Q, next.Derivative); }
+        var d = Offset(t, full);
+        // The left flank ends on the previous turn's crest, the right flank on its own crest.
+        var c = id == 0 ? Crest(t - Lead, full) : Crest(t, full);
         return id switch
         {
-            0 => (Q0 + (Depth - d.D) / ML, -d.Derivative / ML),
+            0 => (Q0 + (c.R - Root - d.D) / ML, (c.Derivative - d.Derivative) / ML),
             1 => (Q0, 0),
             2 => (Q1, 0),
-            3 => (Q1 + (Depth - d.D) / MR, -d.Derivative / MR),
-            _ => (Lead + Q0 + (Depth - d.D) / ML, -d.Derivative / ML)
+            _ => (Q1 + (c.R - Root - d.D) / MR, (c.Derivative - d.Derivative) / MR)
         };
     }
 
@@ -135,6 +158,24 @@ internal sealed class ThreadRunoutLaw
     {
         var values = new List<double> { 0, Lead / 4, Lead / 2, 3 * Lead / 4 };
         if (SmoothExit) { values.Add(Start); values.Add(End); }
+        if (Taper > 0)
+            foreach (bool full in new[] { true, false })
+            {
+                // Vanishing time of the tapered groove: a kink of the offset law, so a patch node.
+                double a = -3 * Lead, b = Height + 3 * Lead;
+                if (Offset(b, full).D < Depth) continue;
+                for (int i = 0; i < 80; i++) { double m = (a + b) / 2; if (Offset(m, full).D < Depth) a = m; else b = m; }
+                values.Add((a + b) / 2);
+            }
+        if (double.IsFinite(Crest0))
+            foreach (bool full in new[] { true, false })
+            {
+                // The crest cone reaches the blank: a kink of the crest law.
+                double a = -3 * Lead, b = Height + 3 * Lead;
+                if (Crest(a, full).R >= Radius || Crest(b, full).R < Radius) continue;
+                for (int i = 0; i < 80; i++) { double m = (a + b) / 2; if (Crest(m, full).R < Radius) a = m; else b = m; }
+                values.Add((a + b) / 2);
+            }
         foreach (double z in new[] { 0.0, Lead, prefix, Height, plainFrom }.Where(double.IsFinite))
             foreach (bool full in new[] { true, false })
                 for (int id = 0; id < 5; id++)

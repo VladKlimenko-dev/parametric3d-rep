@@ -36,6 +36,8 @@ public sealed partial class CosmeticThreadOp : FeatureOp<CosmeticThreadFeature>
         F.ShowPreview = true;
         _face = p.Ref(new RefField { Label = "Цилиндрическая грань", Filter = PickFilter.Faces, Accept = r => r.Kind == PickKind.Face, Single = true });
         if (Editing) _face.Kept = F.OnFaces.Count;
+        _face.KeptLabel = () => FaceLabel(F.FaceId);
+        _face.HoverIds = () => new[] { F.FaceId };
         p.Check("Косметическая", () => F.Cosmetic, v => F.Cosmetic = v, tip: "Обозначение: тело не меняется. Снять — вырез профиля из таблицы резьб.");
         p.List("Тип резьбы", () => Types().Select(t => t.Display).ToList(), () => Types().FindIndex(t => t.Id == F.TypeId),
             i => { var ts = Types(); if (i < ts.Count) { F.TypeId = ts[i].Id; F.LeftHand = ts[i].StdLeft; } },
@@ -44,6 +46,8 @@ public sealed partial class CosmeticThreadOp : FeatureOp<CosmeticThreadFeature>
         p.Number("Шаг", () => F.Pitch, v => F.Pitch = v, visible: () => F.Spec == null);
         _start = p.Ref(PointField("Начало резьбы"));
         if (Editing && F.StartAt != null) _start.Kept = 1;
+        _start.KeptLabel = () => F.StartAt != null ? FaceLabel(F.StartFaceId) : null;
+        _start.HoverIds = () => new[] { F.StartFaceId };
         p.Choice("Длина", new[] { "На длину", "До выбранного" }, () => (int)F.Mode, v => F.Mode = (ThreadLength)v);
         _end = p.Ref(PointField("Конец резьбы", () => F.Mode == ThreadLength.UpTo));
         if (Editing && F.EndAt != null) _end.Kept = 1;
@@ -58,6 +62,10 @@ public sealed partial class CosmeticThreadOp : FeatureOp<CosmeticThreadFeature>
     public override void RefreshStatus() { base.RefreshStatus(); Panel?.Refresh(); }
 
     protected override void SeedRefs() => Seed(_face);
+
+    /// <summary>The real name of a face of the last build (as in the selection list), or null if it is gone.</summary>
+    private string? FaceLabel(uint id) =>
+        id != 0 ? Selection.Label(new PickRef(id, PickKind.Face, Part, null)) : null;
 
     protected override void Push()
     {

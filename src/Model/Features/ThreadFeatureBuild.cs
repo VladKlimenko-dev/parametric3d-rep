@@ -14,6 +14,7 @@ public sealed partial class CosmeticThreadFeature
     {
         Lines = null;
         LastRoute = null;
+        FaceId = 0; StartFaceId = 0;
         if (ctx.Bodies.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: no body.");
         if (OnFaces.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: no face selected.");
         var f = FacePick.Resolve(ctx.Bodies[0], OnFaces, OnFaceNames, "Thread")[0];
@@ -44,6 +45,12 @@ public sealed partial class CosmeticThreadFeature
         double s0 = StartAt is { } sp ? Math.Clamp(Vector3d.Dot(sp - o, w), tMin, tMax) : tMax;
         double dirSign = s0 - tMin >= tMax - s0 ? -1 : 1;
         var u = w * dirSign;
+        FaceId = f.Id;
+        // The start end face: planar, every boundary point on the start plane.
+        StartFaceId = ctx.Bodies[0].Faces.FirstOrDefault(g => !ReferenceEquals(g, f)
+            && GeometryAudit.AuthoritativeSurface(g) is Kernel.Surfaces.PlaneSurface
+            && g.Loops.SelectMany(l => l.CoEdges).All(ce => { var q = new List<Vector3d>(); ce.Edge.Curve.Tessellate(q, true);
+                return q.All(p => Math.Abs(Vector3d.Dot(p - o, w) - s0) < tol); }))?.Id ?? 0;
         double room = dirSign > 0 ? tMax - s0 : s0 - tMin;
         double len;
         if (Mode == ThreadLength.UpTo)

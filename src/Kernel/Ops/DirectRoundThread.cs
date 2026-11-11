@@ -42,7 +42,7 @@ public static partial class DirectRound
                 double qRoot = kind == 0 ? law.Q0 : law.Q1;
                 Vector3d Point(double t, double q)
                 {
-                    double r = kind == 3 ? law.Radius : law.Root + slope * (q - qRoot) + law.Offset(t, full).D;
+                    double r = kind == 3 ? law.Crest(t, full).R : law.Root + slope * (q - qRoot) + law.Offset(t, full).D;
                     double angle = law.Omega * t;
                     var radial = law.Frame.U * Math.Cos(angle) + law.Frame.V * Math.Sin(angle);
                     return law.Frame.Origin + law.Frame.W * (t + q) + radial * r;
@@ -57,8 +57,9 @@ public static partial class DirectRound
                     var range = Range(t); var offset = law.Offset(t, full);
                     double q = range.A * (1 - v) + range.B * v;
                     double dq = range.DA * (1 - v) + range.DB * v;
-                    double r = kind == 3 ? law.Radius : law.Root + slope * (q - qRoot) + offset.D;
-                    double dr = kind == 3 ? 0 : slope * dq + offset.Derivative;
+                    var crest = law.Crest(t, full);
+                    double r = kind == 3 ? crest.R : law.Root + slope * (q - qRoot) + offset.D;
+                    double dr = kind == 3 ? crest.Derivative : slope * dq + offset.Derivative;
                     double angle = law.Omega * t;
                     var radial = law.Frame.U * Math.Cos(angle) + law.Frame.V * Math.Sin(angle);
                     var tangent = law.Frame.V * Math.Cos(angle) - law.Frame.U * Math.Sin(angle);

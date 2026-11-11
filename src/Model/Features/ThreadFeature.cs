@@ -44,6 +44,9 @@ public sealed partial class CosmeticThreadFeature : Feature
     public Vector3d AxisDir { get; private set; }
     public double FaceLength { get; private set; }
     public double ThreadLen { get; private set; }
+    /// <summary>Last build: the threaded cylindrical face and the planar end face where the thread starts (0 — none).</summary>
+    public uint FaceId { get; private set; }
+    public uint StartFaceId { get; private set; }
     /// <summary>Отрезки винтовой линии (и контура профиля у начала) последнего построения — для вида.</summary>
     public IReadOnlyList<(Vector3d A, Vector3d B)>? Lines { get; private set; }
     /// <summary>Панель операции открыта: винтовая линия видна и у настоящей резьбы (предпросмотр).</summary>

@@ -123,6 +123,14 @@ public abstract class Operation
     protected virtual bool AutoPointSketches => true;
     static readonly bool OpSketchPointsOff = Environment.GetEnvironmentVariable("P3D_OPSKETCHPOINTS") == "0";
     private bool _autoPoints;
+    /// <summary>Highlight the references of a panel field under the pointer (null — clear).</summary>
+    public void HoverRef(RefField? f)
+    {
+        var ids = f == null ? null : f.Items.Count > 0 ? f.Items.Select(r => r.Id).ToList()
+            : !f.Touched && f.HoverIds != null ? f.HoverIds().Where(id => id != 0).ToList() : null;
+        W.ViewPort.HighlightSketchEntities(ids);
+    }
+
     public void Activate(RefField? f)
     {
         ActiveRef = f;

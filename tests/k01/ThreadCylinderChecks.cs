@@ -120,6 +120,45 @@ static partial class Program
                 Require(built is >= 1 and <= 2, "repeated turns were rebuilt");
                 Log(new { test = "THREAD-CYLINDER-HALF-METRICS", exit, ms, volume, expected, built, faces = body.Faces.Count(), tail });
             });
+        // User repro: 1/2-14 NPT (taper 1:16) on a plain Ø21 cylinder, built directly as one tapered cell.
+        foreach (var (exit, length) in new[] { (true, 30.0), (false, 30.0), (false, 15.0) })
+        {
+            string tid = $"THREAD-CYLINDER-NPT-D21-H30-L{length}-EXIT{exit}";
+            if (Environment.GetEnvironmentVariable("P3D_THREADCASE") is { } tf && !tid.Contains(tf)) continue;
+            Check(tid, () =>
+            {
+                var part = new Part("npt");
+                var sketch = new Sketch("circle", Frame3.XY); part.Add(sketch);
+                sketch.AddEntity(new SkCircle(new SkPoint(0, 0), 10.5));
+                var ctx = new BuildContext { Part = part, Parameters = new ParameterTable() };
+                var extrusion = new ExtrudeFeature { SketchId = sketch.Id };
+                extrusion.Side1.Distance = 30;
+                extrusion.Execute(ctx);
+                var blank = ctx.Bodies.Single();
+                var spec = Parametric3D.Model.Threads.ThreadDb.All.First(t => t.Designation == "1/2-14 NPT");
+                var feature = new CosmeticThreadFeature { TypeId = spec.Id, Cosmetic = false, SmoothExit = exit };
+                if (length < 30) feature.Length = new(length);
+                feature.OnFaces.Add(FaceRefs.Inside(blank.Faces.Single(f =>
+                    GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.ExtrudedSurface)));
+                var watch = Stopwatch.StartNew();
+                feature.Execute(ctx);
+                double ms = watch.Elapsed.TotalMilliseconds;
+                var body = ctx.Bodies.Single();
+                var valid = SolidValidator.Validate(body);
+                Require(valid.IsValid, valid.Summary());
+                Require(body.Guarantee == GuaranteeLevel.ExactAnalytic, "thread is not exact");
+                Require(feature.LastRoute == (exit ? "direct-runout" : "direct-screw"), "wrong route: " + feature.LastRoute);
+                Require(body.Edges.All(e => e.CoEdges.Count == 2), "unsewn B-rep boundary");
+                double volume = AnalyticVolume.Of(body) ?? double.NaN;
+                double uncached = AnalyticVolume.OfUncached(body) ?? double.NaN;
+                double taper = Math.Tan(spec.HalfConeDeg * Math.PI / 180);
+                double expected = TaperVolumeOracle(spec, 10.5, 30, length, exit, taper);
+                Require(Math.Abs(volume - expected) < expected * 2e-6 && Math.Abs(uncached - expected) < expected * 2e-6,
+                    $"independent volume integral {volume} / {uncached} vs {expected}");
+                Require(BooleanOp.VolumeVsFacets(body) is not { Agree: false }, "display/boundary volume mismatch");
+                Log(new { test = "THREAD-CYLINDER-NPT-METRICS", exit, length, ms, volume, expected, faces = body.Faces.Count() });
+            });
+        }
         // Keep the general periodic sweep covered now that standard trapezoids use ruled strips.
         foreach (bool left in new[] { false, true })
             Check("THREAD-PERIODIC-GENERAL-" + left, () =>
@@ -146,5 +185,42 @@ static partial class Program
         double area = Math.PI / spec.P * (radius * radius * (spec.P - x1 + x0) + root * root * (p[1].X - p[0].X)
             + (Math.Pow(radius, 3) - Math.Pow(root, 3)) / 3 * (1 / mr - 1 / ml));
         return area * length + Math.PI * radius * radius * (height - length);
+    }
+
+    /// <summary>Volume oracle for a tool section raised by smooth exit plus taper·t, clipped at the blank.</summary>
+    static double TaperVolumeOracle(Parametric3D.Model.Threads.ThreadSpec spec, double radius, double height, double length,
+        bool exit, double taper)
+    {
+        var p = spec.ExtZr.OrderBy(v => v.Y).ThenBy(v => v.X).ToArray();
+        double root = p[0].Y, q0 = p[0].X, q1 = p[1].X;
+        double ml = (p[2].Y - root) / (p[2].X - q0), mr = (p[3].Y - root) / (p[3].X - q1);
+        double depth = radius - root, lead = spec.Lead, end = length - q1;
+        double span = Math.Min(lead, length + q0 + depth / ml - q1), start = end - span;
+        double clip = exit ? height : length, crest0 = spec.DMajor / 2;
+        double D(double t)
+        {
+            double s = exit ? Math.Clamp((t - start) / span, 0, 1) : 0;
+            return Math.Min(depth, depth * s * s * (3 - 2 * s) + taper * t);
+        }
+        double C(double t) => Math.Min(radius, crest0 + D(t));
+        double SectionLoss(double t)
+        {
+            double d = D(t), c = C(t), loss = 0;
+            double[] qs = { q0 + (C(t - lead) - root - d) / ml, q0, q1, q1 + (c - root - d) / mr,
+                lead + q0 + (c - root - D(t + lead)) / ml };
+            for (int k = 0; k < 4; k++)
+            {
+                double a = Math.Max(qs[k], -t), b = Math.Min(qs[k + 1], clip - t);
+                if (a >= b) continue;
+                double slope = k == 0 ? ml : k == 2 ? mr : 0, corner = k == 0 ? q0 : q1;
+                double ra = k == 3 ? c : root + d + slope * (a - corner), rb = k == 3 ? c : root + d + slope * (b - corner);
+                loss += (b - a) * (radius * radius - (ra * ra + ra * rb + rb * rb) / 3);
+            }
+            return loss;
+        }
+        const int n = 65536;
+        double a0 = -q1 - depth / mr - lead, a1 = clip - q0 - depth / ml, h = (a1 - a0) / n, sum = SectionLoss(a0) + SectionLoss(a1);
+        for (int i = 1; i < n; i++) sum += (i % 2 == 0 ? 2 : 4) * SectionLoss(a0 + h * i);
+        return Math.PI * radius * radius * height - Math.PI / lead * h * sum / 3;
     }
 }

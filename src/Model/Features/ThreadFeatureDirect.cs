@@ -21,7 +21,10 @@ public sealed partial class CosmeticThreadFeature
         Vector3d b0, Vector3d axis, Vector3d radial, double len, double faceLength, double radius,
         bool left, bool smoothExit)
     {
-        if (inner || spec.Taper || body.Faces.Count() != 3) return null;
+        if (inner || body.Faces.Count() != 3) return null;
+        double taper = spec.Taper ? Math.Tan(spec.HalfConeDeg * Math.PI / 180) : 0;
+        // Tapered pipe threads: crests are truncated on the crest cone (major diameter at the small end).
+        double crest = spec.Taper ? spec.DMajor / 2 : double.PositiveInfinity;
         var caps = body.Faces.Where(f => !ReferenceEquals(f, selected)).ToArray();
         if (caps.Length != 2 || caps.Any(f => GeometryAudit.AuthoritativeSurface(f) is not PlaneSurface
             || f.Loops.Count != 1)) return null;
@@ -41,13 +44,13 @@ public sealed partial class CosmeticThreadFeature
         if (smoothExit)
         {
             if (spec.Starts != 1 || Math.Abs(lead - spec.P) > 1e-9) return null;
-            return ThreadRunoutOp.Build(frame, lead, faceLength, len, radius, spec.ExtZr, left);
+            return ThreadRunoutOp.Build(frame, lead, faceLength, len, radius, spec.ExtZr, left, taper: taper, crest: crest);
         }
         if (spec.Starts == 1 && Math.Abs(lead - spec.P) < 1e-9
             && spec.ExtZr.Length == 4 && spec.ExtZr.Select(p => p.Y).Distinct().Count() == 2)
-            return ThreadRunoutOp.Build(frame, lead, faceLength, len, radius, spec.ExtZr, left, smoothExit: false);
+            return ThreadRunoutOp.Build(frame, lead, faceLength, len, radius, spec.ExtZr, left, smoothExit: false, taper: taper, crest: crest);
         // General profiles: a partial abrupt ending still goes through the end-cut route.
-        if (Math.Abs(len - faceLength) > 1e-7) return null;
+        if (Math.Abs(len - faceLength) > 1e-7 || taper > 0) return null;
         var profile = ThreadSection(spec, radius, frame, left);
         return PeriodicSweepOp.Build(profile, lead, len, left);
     }

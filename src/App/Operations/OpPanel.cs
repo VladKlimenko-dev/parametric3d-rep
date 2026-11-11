@@ -44,6 +44,10 @@ public sealed class RefField
     public Func<bool>? Visible { get; set; }
     public bool Live => (Enabled?.Invoke() ?? true) && (Visible?.Invoke() ?? true);
     public bool Touched;
+    /// <summary>Name of the kept (not yet touched) reference computed from the last build; null — none.</summary>
+    public Func<string?>? KeptLabel { get; set; }
+    /// <summary>Model elements to highlight while the pointer is over the field when it has no fresh picks.</summary>
+    public Func<IEnumerable<uint>>? HoverIds { get; set; }
 
     internal Border? Box;
     internal TextBlock? Text;
@@ -86,6 +90,7 @@ public sealed class RefField
 
     public string Summary =>
         Items.Count > 0 ? (Single ? (Describe ?? Viewport.Selection.Label)(Items[0]) : L("выбрано: {0}", Items.Count))
+        : !Touched && KeptLabel?.Invoke() is { } kl ? kl
         : !Touched && KeptText != null ? KeptText
         : !Touched && KeptSketches is { Count: > 0 } ks ? string.Join(", ", ks.Select(k => L("Эскиз «{0}»", k.Name)))
         : !Touched && Kept > 0 ? L("как было ({0})", Kept)
@@ -179,6 +184,9 @@ public sealed class OpPanel
         if (f.Tip != null && !TipsOff) ToolTip.SetTip(box, L(f.Tip));
         box.PointerPressed += (_, e) => { if (f.Enabled?.Invoke() == false) return; _op.Activate(f); e.Handled = true; };
         if (f.Enabled != null) _enabled.Add((box, f.Enabled));
+        // Hovering the field highlights its references in the view.
+        box.PointerEntered += (_, _) => _op.HoverRef(f);
+        box.PointerExited += (_, _) => _op.HoverRef(null);
         clear.Click += (_, _) => { f.Items.Clear(); f.Touched = true; _op.Activate(f); _op.RefChanged(f); };
         When(Row(f.Label, box), visible);
         if (visible != null) f.Visible = visible;
