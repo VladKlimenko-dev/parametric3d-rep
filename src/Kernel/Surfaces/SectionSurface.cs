@@ -41,7 +41,7 @@ public readonly struct SweepSection
 
     public Vector3d Point(double v)
     {
-        if (Q != null) { var w = (Vector3d[])Q.Clone(); for (int k = w.Length - 1; k > 0; k--) for (int i = 0; i < k; i++) w[i] = w[i] * (1 - v) + w[i + 1] * v; return w[0]; }
+        if (Q != null) { Span<Vector3d> w = Q.Length <= 64 ? stackalloc Vector3d[Q.Length] : new Vector3d[Q.Length]; Q.AsSpan().CopyTo(w); for (int k = w.Length - 1; k > 0; k--) for (int i = 0; i < k; i++) w[i] = w[i] * (1 - v) + w[i + 1] * v; return w[0]; }
         if (!IsArc) return A + (B - A) * v;
         double t = Phi * v;
         return C + (E1 * Math.Cos(t) + E2 * Math.Sin(t)) * R;
@@ -53,7 +53,7 @@ public readonly struct SweepSection
         if (Q != null)
         {
             int n = Q.Length - 1; if (n == 0) return Vector3d.Zero;
-            var w = new Vector3d[n]; for (int i = 0; i < n; i++) w[i] = (Q[i + 1] - Q[i]) * n;
+            Span<Vector3d> w = n <= 64 ? stackalloc Vector3d[n] : new Vector3d[n]; for (int i = 0; i < n; i++) w[i] = (Q[i + 1] - Q[i]) * n;
             for (int k = n - 1; k > 0; k--) for (int i = 0; i < k; i++) w[i] = w[i] * (1 - v) + w[i + 1] * v;
             return w[0];
         }
@@ -283,6 +283,7 @@ public sealed class SectionSurface : ISurface3
     /// <summary>Сечение при параметре хребта u (процедурный режим).</summary>
     public SweepSection SectionAt(double u)
     {
+        if (_evaluateFormula && _gen != null) return _gen(WrapU(u));
         if (_gen == null)
         {
             var (i, f) = Split(u);
@@ -382,11 +383,24 @@ public sealed class SectionSurface : ISurface3
     /// KRN-06 (06.12): ТА ЖЕ ПОВЕРХНОСТЬ ПОД ЖЁСТКИМ ПРЕОБРАЗОВАНИЕМ — формула сечения переносится (каждое сечение —
     /// отображением точек), параметры, пробы, стыки и шаг таблицы — те же. null — поверхность не по формуле.
     /// </summary>
-    public SectionSurface? Mapped(Func<SweepSection, SweepSection> map)
+    internal Func<double, double, Vector3d>? ExactDerivativeU { get; set; }
+
+    internal Vector3d DerivativeU(double u, double v)
+    {
+        if (ExactDerivativeU is { } derivative) return derivative(u, v);
+        double h = 1e-6 * Math.Max(1e-9, UMax - UMin);
+        return (SectionAt(u + h).Point(v) - SectionAt(u - h).Point(v)) / (2 * h);
+    }
+
+    public SectionSurface? Mapped(Func<SweepSection, SweepSection> map, Func<Vector3d, Vector3d>? direction = null)
     {
         if (_gen == null || _stationU == null) return null;
         var g = _gen;
-        return new SectionSurface(u => map(g(u)), _stationU, _s.Select(map).ToList(), Closed, _u0, _u1, _breaks, _tableStep) { ParallelTable = ParallelTable };
+        var result = new SectionSurface(u => map(g(u)), _stationU, _s.Select(map).ToList(), Closed, _u0, _u1, _breaks, _tableStep) { ParallelTable = ParallelTable };
+        if (_evaluateFormula) result.PreferExactFormula();
+        if (ExactDerivativeU is { } derivative && direction != null)
+            result.ExactDerivativeU = (u, v) => direction(derivative(u, v));
+        return result;
     }
 
     /// <summary>
@@ -428,6 +442,10 @@ public sealed class SectionSurface : ISurface3
 
     /// <summary>Сечение по самой формуле (без таблицы) — для проверок.</summary>
     public SweepSection ExactSectionAt(double u) => _gen != null ? _gen(WrapU(u)) : SectionAt(u);
+    // Explicit inexpensive screw laws are cheaper and more accurate than interpolating
+    // arrays of Bezier control points. Enabled by the builder only after its table audit.
+    private bool _evaluateFormula;
+    internal void PreferExactFormula() { if (_gen != null) _evaluateFormula = true; }
 
     // ТАБЛИЦА ФОРМУЛЫ. Формула сечения скругления сама проецирует точки на процедурную
     // поверхность соседней грани — Ньютон внутри Ньютона; проекция на скругление стоила
@@ -575,6 +593,7 @@ public sealed class SectionSurface : ISurface3
         // O(h) хватает — нормаль и направление шага, а не сама точка.
         u = WrapU(u);
         var sec = SectionAt(u);
+        if (ExactDerivativeU is { } derivative) return (sec.Point(v), derivative(u, v), sec.Deriv(v));
         double h = H;
         double ub = u + h;
         if (!Closed && ub > _u1) ub = u - h;
@@ -660,6 +679,9 @@ public sealed class SectionSurface : ISurface3
     /// <summary>Ближайшая точка поверхности: параметры и квадрат расстояния.</summary>
     public Vector2d Project(Vector3d p, out double dist2)
     {
+        // Procedural projection has its own warm start and Dense() search. The legacy
+        // strip grid below was computed and scanned, then discarded on every call.
+        if (_gen != null) return ProjectProcedural(p, out dist2);
         // ЗАТРАВКА — БЛИЖАЙШАЯ ТОЧКА СЕТКИ ПРОБ (сечения × GridV значений v).
         //
         // ИСПРАВЛЕНО (этап 2, скорость). Прежде уточнение шло в каждой полосе, чья
@@ -676,8 +698,6 @@ public sealed class SectionSurface : ISurface3
                 if (d < gd) { gd = d; gs = i; gk = k; }
             }
         double gv = -VReach + (1 + 2 * VReach) * gk / GridV;
-
-        if (_gen != null) return ProjectProcedural(p, out dist2);
 
         int n = Strips;
         double best = double.MaxValue; Vector2d bu = new Vector2d(Math.Min(gs, n), gv);

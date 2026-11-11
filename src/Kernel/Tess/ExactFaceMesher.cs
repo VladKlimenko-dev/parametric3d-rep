@@ -1310,6 +1310,11 @@ public static partial class ExactFaceMesher
     public static long FoldReserveUsed;
     private static (List<Vector3d> P, List<int> T)? MeshUncachedCore(TFace f, out string? why, out List<Vector3d>? normals)
     {
+        if (FullSweepGrid(f) is { } sweepGrid)
+        {
+            normals = sweepGrid.N; why = null;
+            return (sweepGrid.P, sweepGrid.T);
+        }
         // 21.10 (скорость): ЦЕЛЫЙ ТОР (грань без контуров, кроме двух швов) — правильной сеткой по точкам швов: тор-заготовка
         // и тор после булевой, не задевшей его, шли разметкой в параметрах с доводкой (0.1–0.16 с, 12 000 треугольников).
         // Мутация P3D_TORUSGRID=0.

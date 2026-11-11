@@ -18,27 +18,45 @@ public sealed partial class CosmeticThreadFeature
     /// контур профиля впадины выбранного типа у начала.
     /// </summary>
     public static List<(Vector3d A, Vector3d B)> ViewLines(Vector3d b0, Vector3d u, Vector3d e1, double r, double pitch, int starts, double len,
-        bool left, ThreadSpec? spec, bool inner)
+        bool left, ThreadSpec? spec, bool inner, bool smoothExit = false)
     {
         var res = new List<(Vector3d, Vector3d)>();
-        double lead = pitch * starts, turns = len / lead, sg = left ? -1 : 1;
+        double lead = spec?.Lead > 0 ? spec.Lead : pitch * starts, turns = len / lead, sg = left ? -1 : 1;
         double rv = r * (inner ? 0.997 : 1.003);
-        int per = Math.Clamp((int)(6000 / Math.Max(1, turns * starts)), 12, 48);
-        int n = Math.Max(8, (int)Math.Ceiling(per * turns));
+        // A hard total budget, even for very long/fine-pitch threads.
+        int n = Math.Clamp((int)Math.Min(int.MaxValue, Math.Ceiling(48 * turns)), 8, Math.Max(8, 6000 / starts));
         for (int k = 0; k < starts; k++)
         {
             var ek = Rot(e1, u, 2 * Math.PI * k / starts);
-            Vector3d At(double z) => b0 + u * z + Rot(ek, u, sg * 2 * Math.PI * z / lead) * rv;
+            Vector3d At(double z)
+            {
+                if (spec != null && smoothExit)
+                {
+                    var frame = ToolFrame(spec, inner, b0, u, ek, z, len, left, true);
+                    return frame.O + frame.V * rv;
+                }
+                return b0 + u * z + Rot(ek, u, sg * 2 * Math.PI * z / lead) * rv;
+            }
             var prev = At(0);
             for (int i = 1; i <= n; i++) { var p = At(len * i / n); res.Add((prev, p)); prev = p; }
         }
         if (spec != null)
         {
+            // Preview must also work for profiles whose exact cut is unsupported.
             var zr = inner ? spec.IntZr : spec.ExtZr;
+            double entry = LeadInDistance(spec, inner);
+            var first = ToolFrame(spec, inner, b0, u, e1, -entry, len, left, false);
             for (int i = 0; i < zr.Length; i++)
             {
                 var a = zr[i]; var b = zr[(i + 1) % zr.Length];
-                res.Add((b0 + u * a.X + e1 * a.Y, b0 + u * b.X + e1 * b.Y));
+                res.Add((first.O + first.U * a.X + first.V * a.Y, first.O + first.U * b.X + first.V * b.Y));
+            }
+            var previous = first.O + first.V * rv;
+            for (int i = 1; i <= 48; i++)
+            {
+                var f = ToolFrame(spec, inner, b0, u, e1, -entry + entry * i / 48, len, left, false);
+                var point = f.O + f.V * rv;
+                res.Add((previous, point)); previous = point;
             }
         }
         return res;

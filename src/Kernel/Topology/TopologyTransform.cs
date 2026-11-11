@@ -53,6 +53,10 @@ public static class TopologyTransform
 
     public static TSolid? Apply(TSolid src, TransformOp.Xform x) => Apply(src, x, 1.0);
 
+    /// <summary>Translation preserves orientation and measured curve/surface distances.</summary>
+    internal static TSolid? TranslateCell(TSolid src, Vector3d offset) =>
+        Apply(src, TransformOp.Move(offset), 1.0, translation: true);
+
     /// <summary>
     /// 13:09 (FreeForm, масштаб гизмо по осям): МАСШТАБ ПО ОСЯМ — свой коэффициент вдоль каждой оси рамки (u, v, w —
     /// ортонормированные) от точки c. Точно переносятся: отрезки, дуги и эллипсы (дуга становится дугой эллипса — главные
@@ -85,7 +89,8 @@ public static class TopologyTransform
         return new EllipseCurve3(f, r1, r2, sgn * (t0 - th), sgn * (t1 - th));
     }
 
-    static TSolid? Apply(TSolid src, TransformOp.Xform x, double k, (Vector3d U, Vector3d V, Vector3d W, double Sx, double Sy, double Sz)? axes = null)
+    static TSolid? Apply(TSolid src, TransformOp.Xform x, double k, (Vector3d U, Vector3d V, Vector3d W, double Sx, double Sy, double Sz)? axes = null,
+        bool translation = false)
     {
         bool scaled = Math.Abs(k - 1) > 1e-15 || axes != null;
         bool affine = axes != null;
@@ -115,6 +120,7 @@ public static class TopologyTransform
                 ArcCurve3 a => EllipseConjugate(x.Point(a.Frame.Origin), x.Direction(a.Frame.U * a.Radius), x.Direction(a.Frame.V * a.Radius), a.A0, a.A1),
                 EllipseCurve3 e => EllipseConjugate(x.Point(e.Frame.Origin), x.Direction(e.Frame.U * e.RU), x.Direction(e.Frame.V * e.RV), e.A0, e.A1),
                 SplineCurve3 sp => new SplineCurve3(sp.ControlPoints.Select(x.Point).ToList(), sp.Degree, sp.Weights, sp.Knots),
+                BezierCurve3 bz => new BezierCurve3(bz.P.Select(x.Point)),
                 _ => null
             } : c switch
             {
@@ -122,6 +128,7 @@ public static class TopologyTransform
                 ArcCurve3 a => new ArcCurve3(Frame(a.Frame, x), a.Radius * k, x.Flips ? -a.A0 : a.A0, x.Flips ? -a.A1 : a.A1),
                 EllipseCurve3 e => new EllipseCurve3(Frame(e.Frame, x), e.RU * k, e.RV * k, x.Flips ? -e.A0 : e.A0, x.Flips ? -e.A1 : e.A1),
                 SplineCurve3 sp => new SplineCurve3(sp.ControlPoints.Select(x.Point).ToList(), sp.Degree, sp.Weights, sp.Knots),
+                BezierCurve3 bz => new BezierCurve3(bz.P.Select(x.Point)),
                 // KRN-06 (06.12): формула переносится отображением точки; кривая пересечения — те же поверхности, перенесённые
                 ProcCurve3 pc when !XformProcOff && !scaled => pc.Mapped(x.Point),
                 IntersectionCurve3 ic when !XformProcOff && !scaled && S(ic.A) is { } ia && S(ic.B) is { } ib => new IntersectionCurve3(ia, ib, ic.Seed.Select(x.Point).ToList()),
@@ -158,7 +165,7 @@ public static class TopologyTransform
                 CornerPatchSurface cp => cp.Mapped(x.Point),
                 SectionSurface ss when !XformProcOff && !scaled => ss.Mapped(q => q.IsBezier ? q.MapBezier(x.Point) : q.IsArc
                     ? SweepSection.Arc(x.Point(q.C), x.Direction(q.E1).Normalized(), x.Direction(q.E2).Normalized(), q.R, q.Phi)
-                    : SweepSection.Line(x.Point(q.A), x.Point(q.B))),
+                    : SweepSection.Line(x.Point(q.A), x.Point(q.B)), x.Direction),
                 _ => null
             };
             if (r != null) surfs[s] = r;
@@ -177,6 +184,7 @@ public static class TopologyTransform
         var srcFaces = src.Faces.ToList(); var want = new List<(Vector3d P, Vector3d N)?>();
         foreach (var f in srcFaces)
         {
+            if (translation) { want.Add(null); continue; }
             var ce0 = f.Loops.SelectMany(l => l.CoEdges).FirstOrDefault();
             Vector3d p;
             if (ce0 != null) p = ce0.Edge.Curve.PointAt((ce0.Edge.Curve.T0 + ce0.Edge.Curve.T1) / 2);
@@ -204,6 +212,8 @@ public static class TopologyTransform
                     nf.SetDisplay(tris, nrm);
                 }
                 f.Surface = nf;
+                if (translation && fs.Source is { } oldSurface && nf.Source is { } newSurface)
+                    GeometryAudit.ReuseTranslatedChord(fs, oldSurface, nf, newSurface);
             }
             else f.Surface = S(f.Surface)!;
             // g.05: точка грани переносится с гранью. Прежде оставалась на старом месте — сторона сферической грани и объём грани
@@ -228,6 +238,7 @@ public static class TopologyTransform
                 if (Vector3d.Dot(n2, w.N) < 0) dstFaces[i].Reversed = !dstFaces[i].Reversed;
             }
         dst.DisplayMeshKey = null;
+        if (translation) GeometryAudit.ReuseTranslatedOffsets(curves, surfs);
         // g.11: сетка — от контуров с общими точками рёбер (как у результатов точной булевой). Без этого повёрнутое тело
         // размечалось по граням независимо (общая разметка квадрик — только для тел по осям), и соседние грани делили
         // общее ребро по-разному: трещины отображения (брусок — 6 сторон без пары). Мутация P3D_XFORMMESH=0.

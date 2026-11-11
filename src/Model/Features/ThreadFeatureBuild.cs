@@ -13,6 +13,7 @@ public sealed partial class CosmeticThreadFeature
     public override void Execute(BuildContext ctx)
     {
         Lines = null;
+        LastRoute = null;
         if (ctx.Bodies.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: no body.");
         if (OnFaces.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: no face selected.");
         var f = FacePick.Resolve(ctx.Bodies[0], OnFaces, OnFaceNames, "Thread")[0];
@@ -63,19 +64,43 @@ public sealed partial class CosmeticThreadFeature
         int starts = Math.Max(1, spec?.Starts ?? 1);
         var b0 = o + w * s0;
         var e1 = Frame3.FromNormal(b0, u).U.Normalized();
-        Lines = ViewLines(b0, u, e1, r0, pitch, starts, len, LeftHand, spec, Internal);
+        Lines = ViewLines(b0, u, e1, r0, pitch, starts, len, LeftHand, spec, Internal, SmoothExit);
 
-        if (Cosmetic) return;
+        if (Cosmetic) { LastRoute = "cosmetic"; return; }
         if (spec == null) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: choose a thread type for a cut thread.");
         // вырез глубже грани (у вала — впадины не ниже поверхности) теряет смысл: отказ; номинал далеко от грани — предупреждение
         if (!ThreadDb.Candidates(Diameter, Internal).Contains(spec))
             throw new RebuildException(OperationOutcome.InvalidInput, $"Thread: {spec.Designation} is too large for a {(Internal ? "hole" : "shaft")} of diameter {Diameter:0.###}.");
         if (Internal ? Math.Abs(Diameter - (spec.TapDrill ?? spec.IntMinorD)) > 0.25 * spec.P + 0.1 : Math.Abs(Diameter - spec.DMajor) > 0.3 * spec.P + 0.05)
             ctx.Warnings.Add($"{Name}: {spec.Designation} is meant for a {(Internal ? "hole" : "shaft")} of diameter {(Internal ? spec.TapDrill ?? spec.IntMinorD : spec.DMajor):0.###}, the face is {Diameter:0.###}.");
-        foreach (var tool in CutTools(spec, Internal, b0, u, e1, len, LeftHand, SmoothExit))
+        // This transient panel flag is NOT serialized. Preview is an explicitly labelled
+        // helix/profile overlay, not an expensive boolean and not a committed solid.
+        // Do not use KernelSettings.Preview alone: normal deferred validation also sets it.
+        if (ShowPreview) { LastRoute = "overlay"; return; }
+        if (SmoothExit)
+            throw new RebuildException(OperationOutcome.Unsupported,
+                "Thread: exact smooth run-out is not implemented yet. The original body is unchanged.");
+        using var exactScope = (KernelContext.Current ?? new KernelContext())
+            .With(s => s with { GeometryPolicy = GeometryPolicy.PreserveBRep, Preview = false, LivePreview = false })
+            .WithPolicy(OperationPolicy.Strict).Enter();
+        var resultBodies = ctx.Bodies.ToList();
+        if (ctx.Bodies.Count == 1 && DirectCylinder(ctx.Bodies[0], f, spec, Internal, b0, u, e1,
+                len, FaceLength, r0, LeftHand, SmoothExit) is { } direct)
+        {
+            KernelContext.Checkpoint("thread.publish");
+            ctx.Bodies[0] = direct;
+            LastRoute = "direct-screw";
+            return;
+        }
+        foreach (var tool in CutTools(spec, Internal, b0, u, e1, len, LeftHand, SmoothExit, r0))
         {
             KernelContext.Checkpoint("thread.cut");
-            BooleanOp.Subtract(ctx.Bodies, tool, ctx.Warnings);
+            BooleanOp.Subtract(resultBodies, tool, ctx.Warnings);
+            if (resultBodies.Any(b => b.Guarantee != GuaranteeLevel.ExactAnalytic))
+                throw new RebuildException(OperationOutcome.Unsupported, "Thread: the cut did not preserve exact surfaces.");
         }
+        ctx.Bodies.Clear();
+        ctx.Bodies.AddRange(resultBodies);
+        LastRoute = "exact-boolean";
     }
 }

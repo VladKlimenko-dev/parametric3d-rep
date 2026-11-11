@@ -12,7 +12,7 @@ public static partial class ThreadDb
         var res = new List<ThreadSpec>();
         if (lines.Length < 2) return res;
         var head = SplitCsv(lines[0]);
-        int Col(string name) => head.FindIndex(h => h.Trim() == name);
+        int Col(string name) => head.FindIndex(h => h.Trim().TrimStart('\uFEFF') == name);
         int cFam = Col("family"), cDes = Col("designation"), cSer = Col("series"), cD = Col("d_major_mm"), cP = Col("P_mm"),
             cD1 = Col("D1_mm"), cD3 = Col("d3_mm"), cTap = Col("tap_drill_mm"),
             cER = Col("ext_start_R_mm"), cEd = Col("ext_depth_mm"), cEw0 = Col("ext_w0_mm"), cEwb = Col("ext_wbot_mm"),

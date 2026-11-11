@@ -49,9 +49,10 @@ public sealed partial class CosmeticThreadOp : FeatureOp<CosmeticThreadFeature>
         if (Editing && F.EndAt != null) _end.Kept = 1;
         p.Number("Длина резьбы", ShownLength, SetLength, enabled: () => F.Mode == ThreadLength.Blind, scrub: 1);
         p.Check("Плавный выход", () => F.SmoothExit, v => F.SmoothExit = v, enabled: () => !F.Cosmetic,
-            tip: "На последнем витке профиль плавно выходит из материала");
+            tip: "Показывает траекторию выхода. Точное тело с плавным выходом пока не поддержано: ОК выдаст отказ без изменения детали.");
         p.Check("Левая", () => F.LeftHand, v => F.LeftHand = v);
-        p.Note("Начало — торец, вершина или точка; без выбора — торец грани. Длина 0 — вся грань.");
+        p.Note("Предпросмотр — винтовая линия и профиль, без выреза тела. Точный вырез — после ОК.");
+        p.Note("Резец заходит до начала участка с плавным врезанием. Длина 0 — вся грань.");
     }
 
     public override void RefreshStatus() { base.RefreshStatus(); Panel?.Refresh(); }

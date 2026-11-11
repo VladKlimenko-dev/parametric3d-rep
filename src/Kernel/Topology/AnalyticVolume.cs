@@ -103,6 +103,17 @@ public static class AnalyticVolume
     }
 
     private sealed class VolEntry { public long Revision; public ulong Print; public KernelSettings Key = null!; public double? Volume; public double Quad; }
+    /// <summary>Builder-only additive integral for certified, non-overlapping sewn cells.</summary>
+    internal static void RememberComposition(TSolid solid, double volume, double error)
+    {
+        if (!double.IsFinite(volume) || !double.IsFinite(error) || volume <= 0 || error < 0)
+            throw new ArgumentException("Invalid composition measure.");
+        var key = KernelSettings.Capture() with { Preview = false, LivePreview = false };
+        if (!SolidValidator.KeyDisplayOff) key = key with { DeferMeshing = false, BooleanThreads = 1, MeshThreads = 1 };
+        _volCache.AddOrUpdate(solid, new VolEntry { Revision = solid.Revision,
+            Print = TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff), Key = key,
+            Volume = volume, Quad = error * 3 });
+    }
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, VolEntry> _volCache = new();
     static readonly bool VolCacheOff = Environment.GetEnvironmentVariable("P3D_VOLCACHE") == "0";
     static readonly bool VolParOff = Environment.GetEnvironmentVariable("P3D_VOLPAR") == "0";
@@ -820,6 +831,22 @@ public static class AnalyticVolume
         }
         Func<double, double> Make(ICurve3 c)
         {
+            // A swept section is an isoparametric cut, including a Bezier section.
+            // Do not run an inverse curve/surface solve at every quadrature node.
+            if (f.Tag?.StartsWith("sweep:side[") == true && c is LineCurve3 or ArcCurve3 or BezierCurve3)
+            {
+                var start = ss.ProjectToUV(c.PointAt(c.T0));
+                var end = ss.ProjectToUV(c.PointAt(c.T1));
+                double fixedU = (start.X + end.X) / 2;
+                if (Math.Abs(start.X - end.X) <= 1e-10 * Math.Max(1, ss.UMax - ss.UMin)
+                    && Enumerable.Range(0, 33).All(k =>
+                    {
+                        double t = k / 32.0;
+                        return (ss.PointAt(new Vector2d(fixedU, start.Y + (end.Y - start.Y) * t))
+                            - c.PointAt(c.T0 + (c.T1 - c.T0) * t)).Length <= 1e-8;
+                    }))
+                    return _ => fixedU;
+            }
             bool inc = ss.ProjectToUV(c.PointAt(c.T1)).Y > ss.ProjectToUV(c.PointAt(c.T0)).Y;
             // u12: БОКОВОЕ РЕБРО — САМО СЕЧЕНИЕ ИЛИ КРАЙ ПО ДОЛЕ v: параметр ребра линеен по v (сечение-дуга по углу, сечение-
             // отрезок, край ленты на торце из корней по v) — точка с данным v берётся прямо, без поиска по ребру.
@@ -877,6 +904,21 @@ public static class AnalyticVolume
             if (_bandCoarse is { } bc && ReferenceEquals(bc.F, f) && bc.Area == area) { _bandCoarse = null; return bc.Coarse; }
             return BandOpenIntegralAt(f, ss, rg, area, 24, 8);
         }
+        // Smooth, whole sweep patches need far fewer nodes than a general trimmed blend.
+        // Still compare genuinely different u AND v quadratures; on disagreement use
+        // the established dense path below. No acceptance/volume check is disabled.
+        if (f.Tag?.StartsWith("sweep:side[") == true && f.Loops.Count == 1
+            && f.Loops[0].CoEdges.Count == 4 && ss.Breaks.Count == 0)
+        {
+            var fineSweep = BandOpenIntegralAt(f, ss, rg, area, 8, 2);
+            var coarseSweep = BandOpenIntegralAt(f, ss, rg, area, 4, 1);
+            if (fineSweep is { } fv && coarseSweep is { } cv
+                && Math.Abs(fv - cv) <= 1e-11 * Math.Max(1e-9, Math.Abs(fv)))
+            {
+                _bandCoarse = (f, area, cv);
+                return fv;
+            }
+        }
         var a = BandOpenIntegralAt(f, ss, rg, area, 24, 8);
         var b = BandOpenIntegralAt(f, ss, rg, area, 12, 4);
         if (a is { } av && b is { } bv && Math.Abs(av - bv) <= 1e-11 * Math.Max(1e-9, Math.Abs(av))) { _bandCoarse = (f, area, bv); return av; }
@@ -921,7 +963,7 @@ public static class AnalyticVolume
                         {
                             double u = pa + pw * (i + (gx[j] + 1) / 2), w = gw[j] / 2 * pw * wv;
                             var s0 = ss.SectionAt(u);
-                            var P = s0.Point(v); var su = (ss.SectionAt(u + h).Point(v) - ss.SectionAt(u - h).Point(v)) / (2 * h); var sv = s0.Deriv(v);
+                            var P = s0.Point(v); var su = ss.DerivativeU(u, v); var sv = s0.Deriv(v);
                             var c = Vector3d.Cross(su, sv);
                             rv += Vector3d.Dot(P - origin, c) * w; ra += c.Length * w; rva += c * w;
                         }
@@ -949,7 +991,7 @@ public static class AnalyticVolume
                     {
                         double u = pa + pw * (i + (gx[j] + 1) / 2), w = gw[j] / 2 * pw * wv;
                         var s0 = ss.SectionAt(u);
-                        var P = s0.Point(v); var su = (ss.SectionAt(u + h).Point(v) - ss.SectionAt(u - h).Point(v)) / (2 * h); var sv = s0.Deriv(v);
+                        var P = s0.Point(v); var su = ss.DerivativeU(u, v); var sv = s0.Deriv(v);
                         var c = Vector3d.Cross(su, sv);
                         vol += Vector3d.Dot(P - _origin, c) * w; ar += c.Length * w; va += c * w;
                     }

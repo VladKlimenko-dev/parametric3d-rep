@@ -41,7 +41,8 @@ public static partial class DirectRound
     /// касательной и не проворачивается рамкой без вращения. Торцы — в плоскостях сечения.
     /// </summary>
     internal static TSolid? ExactSweep(Profile section, ICurve3 path, double frac, double twistRad, bool keepOrientation,
-        Func<double, (Vector3d O, Vector3d U, Vector3d V)>? frameLaw, ref string? why)
+        Func<double, (Vector3d O, Vector3d U, Vector3d V)>? frameLaw, ref string? why, int lawSpans = 1,
+        Func<double, Vector3d, Vector3d>? pointVelocity = null)
     {
         if (frameLaw != null && (keepOrientation || Math.Abs(twistRad) > 1e-12)) { why = "exact sweep: a frame law with a twist or the kept orientation"; return null; }
         if (keepOrientation && Math.Abs(twistRad) > 1e-12) { why = "exact sweep: a twist with the kept orientation"; return null; }
@@ -64,9 +65,9 @@ public static partial class DirectRound
         for (int i = 0; i <= NT; i++) { double s = s0 + h * i; P[i] = path.PointAt(s); T[i] = Tan(s); }
         if (T.Any(x => double.IsNaN(x.X))) { why = "exact sweep: path tangent undefined"; return null; }
         // начальная рамка: плоскость сечения поворачивается нормалью по касательной в начале (как у прежней протяжки)
-        var f0 = Align(section.Plane, P[0], T[0]);
+        var f0 = frameLaw == null ? Align(section.Plane, P[0], T[0]) : section.Plane;
         R[0] = f0.U;
-        for (int i = 0; i < NT; i++)
+        for (int i = 0; frameLaw == null && i < NT; i++)
         {
             var v1 = P[i + 1] - P[i]; double c1 = Vector3d.Dot(v1, v1);
             if (c1 < 1e-30) { why = "exact sweep: path speed vanishes"; return null; }
@@ -75,7 +76,8 @@ public static partial class DirectRound
             R[i + 1] = c2 < 1e-30 ? rL : rL - v2 * (2 / c2 * Vector3d.Dot(v2, rL));
             R[i + 1] = (R[i + 1] - T[i + 1] * Vector3d.Dot(R[i + 1], T[i + 1])).Normalized();
         }
-        for (int i = 0; i <= NT; i++) { double s = s0 + h * i; dR[i] = -T[i] * Vector3d.Dot(R[i], TanD(s)); }
+        if (frameLaw == null)
+            for (int i = 0; i <= NT; i++) { double s = s0 + h * i; dR[i] = -T[i] * Vector3d.Dot(R[i], TanD(s)); }
         double corr = 0;
         if (closedP)
         {
@@ -112,7 +114,9 @@ public static partial class DirectRound
         // грани по контуру давало вывернутые треугольники на внутренней стороне)
         double turn = 0; for (int i = 0; i < NT; i++) turn += Math.Acos(Math.Clamp(Vector3d.Dot(T[i], T[i + 1]), -1, 1));
         int nSp = Math.Max(3, (int)Math.Ceiling(turn / (Math.PI / 2) - 1e-9));
-        var spans = closedP ? Enumerable.Range(0, nSp).Select(k => (s0 + (s1 - s0) * k / nSp, k == nSp - 1 ? s1 : s0 + (s1 - s0) * (k + 1) / nSp)).ToArray() : new[] { (s0, s1) };
+        int spanCount = closedP ? nSp : frameLaw != null ? Math.Max(1, lawSpans) : 1;
+        var spans = Enumerable.Range(0, spanCount).Select(k =>
+            (s0 + (s1 - s0) * k / spanCount, k == spanCount - 1 ? s1 : s0 + (s1 - s0) * (k + 1) / spanCount)).ToArray();
         // рельсы — по одной процедурной кривой на точку стыка звеньев и промежуток (общие у соседних граней)
         var rails = new Dictionary<(long, long, long, int), ProcCurve3>();
         ProcCurve3 Rail(Vector3d x, int sp)
@@ -167,6 +171,9 @@ public static partial class DirectRound
                     double worst = 0;
                     for (int i = 0; i < 400; i++) { double U = Ua + (Ub - Ua) * (i + 0.5) / 400; var ta = surf.SectionAt(U); var ex = surf.ExactSectionAt(U); foreach (double v in new[] { 0.0, 0.5, 1.0 }) worst = Math.Max(worst, (ta.Point(v) - ex.Point(v)).Length); }
                     if (worst > Math.Max(1e-8, 0.2 * ToleranceContext.Current.ModelAccuracy)) { why = $"exact sweep: surface table deviates from the formula ({worst:E1} mm)"; return null; }
+                    if (frameLaw != null) surf.PreferExactFormula();
+                    if (pointVelocity != null)
+                        surf.ExactDerivativeU = (uu, vv) => pointVelocity(s0 + uu / kU, gen(uu).Point(vv)) / kU;
                     var (c0, a0, b0) = cuts[sp]; var (c1, a1, b1) = cuts[sp + 1];
                     var fd = new FDesc { Surf = surf, Tag = $"sweep:side[{li}.{segIdx}]" + (spans.Length > 1 ? $":{sp}" : ""), Touched = false };
                     fd.Loops.Add(new List<Seg>
@@ -181,7 +188,7 @@ public static partial class DirectRound
                     var tg2 = pl.ToLocal2(c.PointAt((c.T0 + c.T1) / 2 + 1e-6 * (c.T1 - c.T0))) - pl.ToLocal2(c.PointAt((c.T0 + c.T1) / 2 - 1e-6 * (c.T1 - c.T0)));
                     var out2 = new Vector2d(tg2.Y, -tg2.X).Normalized();
                     var fm = Fr(s0 + Um / kU); var out3 = fm.U * out2.X + fm.V * out2.Y;
-                    fd.Rev = Vector3d.Dot(surf.NormalAt(surf.ProjectToUV(mid)), out3) < 0;
+                    fd.Rev = Vector3d.Dot(surf.NormalAt(new Vector2d(Um, 0.5)), out3) < 0;
                     fd.Hint = mid;
                     faces.Add(fd);
                 }

@@ -228,9 +228,11 @@ public static class SweepOp
     /// <summary>
     /// ПРОТЯЖКА ПО ЗАКОНУ РАМКИ (резьба): сечение переносится рамкой law(s), s ∈ [0, 1] — начало и оси U, V плоскости
     /// сечения в мире; law(0) — плоскость самого сечения. Винтовое движение с добавками (конусность, плавный выход — сдвиг
-    /// по радиусу) задаёт вызывающий. Точно (грани по формуле сечения); иначе — многогранно по steps + 1 рамкам.
+    /// по радиусу) задаёт вызывающий. requireExact запрещает многогранный запасной путь.
+    /// lawSpans разбивает параметрический интервал на грани, не меняя закон поверхности.
     /// </summary>
-    public static TSolid BuildByLaw(Profile section, Func<double, (Vector3d O, Vector3d U, Vector3d V)> law, int steps)
+    public static TSolid BuildByLaw(Profile section, Func<double, (Vector3d O, Vector3d U, Vector3d V)> law, int steps,
+        bool requireExact = false, int lawSpans = 1, Func<double, Vector3d, Vector3d>? pointVelocity = null)
     {
         if (section.IsEmpty) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: the section is empty or not closed.");
         var pl = section.Plane;
@@ -239,8 +241,10 @@ public static class SweepOp
         var cl = pl.ToLocal2(cen);
         var path = new ProcCurve3(s => { var f = law(s); return f.O + f.U * cl.X + f.V * cl.Y; }, 0, 1, false, "thread helix");
         string? why = null;
-        var ex = DirectRound.ExactSweep(section, path, 1, 0, false, law, ref why);
+        var ex = DirectRound.ExactSweep(section, path, 1, 0, false, law, ref why, lawSpans, pointVelocity);
         if (ex != null) return ex;
+        if (requireExact)
+            throw new RebuildException(OperationOutcome.Unsupported, "Sweep: exact construction failed: " + why);
         DirectRound.Debug?.Invoke("law sweep: exact declined: " + why);
         int n = Math.Max(16, steps);
         var frames = new List<Frame3>(n + 1);

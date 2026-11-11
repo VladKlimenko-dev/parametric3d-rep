@@ -354,6 +354,8 @@ static partial class Program
         // Полный прогон разделён на две части: целиком он перестал укладываться в предел одной
         // команды среды (300 с). allA — K01–K06, allB — K07–K10 и G.
         if (mode is "threadarchive") ThreadArchiveChecks();
+        if (mode is "threadbench") { ThreadBench(args); return; }
+        if (mode is "threadchecks") ThreadChecks();
         if (mode is "one")   // диагностика: один сценарий по идентификатору, трасса нового входа по PLANARDBG=1
         {
             if (Environment.GetEnvironmentVariable("PLANARDBG") == "1")

@@ -266,6 +266,38 @@ public sealed class GeometryAudit
         lock (b) { b.S = s; b.N = fs.Facets.Count; b.D = d; }
     }
 
+    // Translation is an isometry, so numerical distances certified on the seed
+    // can be reused. Add a coordinate-dependent floating-point allowance; cache
+    // keys still identify the actual curves/surfaces and complete facet contents.
+    internal static void ReuseTranslatedChord(FacetedSurface from, ISurface3 fromSurface,
+        FacetedSurface to, ISurface3 toSurface)
+    {
+        if (!UseCache || (CachedChord(from, fromSurface) ?? ChordByContent(from, fromSurface)) is not { } distance)
+            return;
+        double scale = 1;
+        foreach (var (a, b, c) in to.Facets.ReadView)
+            scale = Math.Max(scale, Math.Max(a.Length, Math.Max(b.Length, c.Length)));
+        StoreChordByContent(to, toSurface, distance + 64 * 2.220446049250313e-16 * scale);
+    }
+
+    internal static void ReuseTranslatedOffsets(Dictionary<ICurve3, ICurve3> curves,
+        Dictionary<ISurface3, ISurface3> surfaces)
+    {
+        if (!UseCache) return;
+        foreach (var (from, to) in curves)
+        {
+            if (!_off.TryGetValue(from, out var source)) continue;
+            double scale = Math.Max(1, Math.Max(to.PointAt(to.T0).Length, to.PointAt(to.T1).Length));
+            double roundoff = 64 * 2.220446049250313e-16 * scale;
+            var target = _off.GetValue(to, _ => new OffBox());
+            lock (source)
+                lock (target)
+                    foreach (var (surface, exact, distance) in source.L)
+                        if (surfaces.TryGetValue(surface, out var moved))
+                            target.L.Add((moved, exact, distance + roundoff));
+        }
+    }
+
     private static double Distance(ISurface3 s, Vector3d p)
     {
         try { return (s.PointAt(s.ProjectToUV(p)) - p).Length; }

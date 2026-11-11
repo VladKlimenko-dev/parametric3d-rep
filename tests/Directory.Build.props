@@ -7,6 +7,7 @@
     • Fixtures (tests/stepfiles) копируются в выходной каталог: тесты читают их из AppContext.BaseDirectory/stepfiles.
   -->
   <PropertyGroup>
+    <LangVersion>12</LangVersion>
     <SourceRoot Condition="'$(SourceRoot)'==''">$(MSBuildThisFileDirectory)../src</SourceRoot>
   </PropertyGroup>
   <!-- Автономная сборка: пакетов не нужно, сеть не трогается. -->
@@ -23,6 +24,8 @@
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../threads_db.json" Link="threads_db.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(MSBuildThisFileDirectory)../threads_table.csv" Link="threads_table.csv" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(MSBuildThisFileDirectory)stepfiles/**/*" LinkBase="stepfiles" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

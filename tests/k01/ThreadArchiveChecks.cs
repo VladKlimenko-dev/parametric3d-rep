@@ -37,13 +37,14 @@ static partial class Program
                 TypeId = "TEST|SYNTHETIC|test", Cosmetic = false, Pitch = new ValueRef(1.25),
                 Length = new ValueRef(7), StartAt = new Vector3d(1, 2, 3),
                 EndAt = new Vector3d(4, 5, 6), Mode = ThreadLength.UpTo,
-                SmoothExit = true, LeftHand = true
+                SmoothExit = true, LeftHand = true, ShowPreview = true
             };
             feature.OnFaces.Add(new Vector3d(2, 3, 4));
             feature.OnFaceNames.Add("test-face");
             part.Features.Add(feature);
             var loaded = DocumentFile.Load(DocumentFile.Save(part)).Part;
             var saved = loaded.Features.OfType<CosmeticThreadFeature>().Single();
+            Require(!saved.ShowPreview && saved.LastRoute == null, "preview/diagnostic state persisted");
             Require(saved.TypeId == feature.TypeId && !saved.Cosmetic, "type/cosmetic persistence");
             Require(saved.Mode == ThreadLength.UpTo && saved.SmoothExit && saved.LeftHand, "options persistence");
             Require(saved.StartAt == feature.StartAt && saved.EndAt == feature.EndAt, "references persistence");

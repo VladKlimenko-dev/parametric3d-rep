@@ -48,6 +48,8 @@ public sealed partial class CosmeticThreadFeature : Feature
     public IReadOnlyList<(Vector3d A, Vector3d B)>? Lines { get; private set; }
     /// <summary>Панель операции открыта: винтовая линия видна и у настоящей резьбы (предпросмотр).</summary>
     public bool ShowPreview;
+    /// <summary>Runtime diagnostic only: cosmetic / overlay / direct-screw / exact-boolean.</summary>
+    public string? LastRoute { get; private set; }
 
     public CosmeticThreadFeature(string name = "Thread") { Name = name; }
 
