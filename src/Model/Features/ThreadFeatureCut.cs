@@ -49,11 +49,12 @@ public sealed partial class CosmeticThreadFeature
 
     /// <summary>Analytic frame law with C1 radial entry, optional exit; z=0 is the requested start.</summary>
     public static (Vector3d O, Vector3d U, Vector3d V) ToolFrame(ThreadSpec spec, bool inner,
-        Vector3d b0, Vector3d u, Vector3d radial, double z, double len, bool left, bool smoothExit)
+        Vector3d b0, Vector3d u, Vector3d radial, double z, double len, bool left, bool smoothExit,
+        double? blankRadius = null)
     {
         var zr = inner ? spec.IntZr : spec.ExtZr;
         double lead = spec.Lead > Tol.Weld ? spec.Lead : spec.P * Math.Max(1, spec.Starts);
-        double rFace = inner ? spec.IntStartR : spec.ExtStartR;
+        double rFace = blankRadius ?? (inner ? spec.IntStartR : spec.ExtStartR);
         double depth = zr.Max(p => Math.Abs(p.Y - rFace)) + 0.15 * spec.P;
         double outSign = inner ? -1 : 1;
         var v = Rot(radial, u, (left ? -1 : 1) * 2 * Math.PI * z / lead);
@@ -64,11 +65,27 @@ public sealed partial class CosmeticThreadFeature
             double t = Math.Clamp((-z - Math.Max(0, zr.Max(p => p.X))) / lead, 0, 1);
             dr += outSign * depth * t * t * (3 - 2 * t);
         }
-        double exitLen = smoothExit ? Math.Min(lead, len / 2) : 0;
-        if (exitLen > 0 && z > len - exitLen)
+        if (smoothExit)
         {
-            double t = Math.Clamp((z - len + exitLen) / exitLen, 0, 1);
-            dr += outSign * depth * t * t * (3 - 2 * t);
+            double root = inner ? zr.Max(p => p.Y) : zr.Min(p => p.Y);
+            double rootRight = zr.Where(p => Math.Abs(p.Y - root) < 1e-12).Max(p => p.X);
+            double first = double.PositiveInfinity;
+            for (int i = 0; i < zr.Length; i++)
+            {
+                var a = zr[i]; var b = zr[(i + 1) % zr.Length];
+                if (Math.Abs(b.Y - a.Y) < 1e-14 || (a.Y - rFace) * (b.Y - rFace) > 0) continue;
+                first = Math.Min(first, a.X + (b.X - a.X) * (rFace - a.Y) / (b.Y - a.Y));
+            }
+            double end = len - rootRight, exitLen = Math.Min(lead, len + first - rootRight);
+            // Unsupported short/atypical profiles still receive a finite cosmetic overlay.
+            // Committing their exact body is separately rejected by the direct builder.
+            if (!double.IsFinite(exitLen) || exitLen <= 0) { end = len; exitLen = len / 2; }
+            if (exitLen > 0)
+            {
+                double t = Math.Clamp((z - end + exitLen) / exitLen, 0, 1);
+                // Exactly to the blank: extra clearance here would cross it with nonzero velocity.
+                dr += outSign * Math.Abs(root - rFace) * t * t * (3 - 2 * t);
+            }
         }
         return (b0 + u * z + v * dr, u, v);
     }
@@ -90,7 +107,7 @@ public sealed partial class CosmeticThreadFeature
             KernelContext.Checkpoint("thread.tool");
             var radial = Rot(e1, u, 2 * Math.PI * k / starts);
             (Vector3d O, Vector3d U, Vector3d V) Law(double s) =>
-                ToolFrame(spec, inner, b0, u, radial, -entry + travel * s, len, left, smoothExit);
+                ToolFrame(spec, inner, b0, u, radial, -entry + travel * s, len, left, smoothExit, blankRadius);
             var first = Law(0);
             var plane = new Frame3(first.O, first.U, first.V);
             var curves = Enumerable.Range(0, zr.Length).Select(i => (ICurve3)new LineCurve3(

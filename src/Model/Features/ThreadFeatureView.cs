@@ -32,7 +32,7 @@ public sealed partial class CosmeticThreadFeature
             {
                 if (spec != null && smoothExit)
                 {
-                    var frame = ToolFrame(spec, inner, b0, u, ek, z, len, left, true);
+                    var frame = ToolFrame(spec, inner, b0, u, ek, z, len, left, true, r);
                     return frame.O + frame.V * rv;
                 }
                 return b0 + u * z + Rot(ek, u, sg * 2 * Math.PI * z / lead) * rv;

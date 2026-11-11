@@ -34,6 +34,7 @@ static partial class Program
         ["Model.Features.Feature._keyCounter"] = "детерминированные ключи проверок (Interlocked)",
         ["Kernel.KernelContext._verifying"] = "счётчик контекстов с проверкой предикатов (Interlocked)",
         // разбор и профили
+        ["Kernel.Ops.DirectRound.ExactThreadCells"] = "диагностический счётчик построенных ячеек резьбы (Interlocked); не влияет на геометрию или выбор пути",
         ["Kernel.Diagnostics.Prof.Enabled"] = "профилирование",
         ["Kernel.Curves.IntersectionCurve3.ShapeProjections"] = "g.13: счётчик проекций по аналитической форме (Interlocked, только замер)",
         ["Kernel.Ops.BooleanOp.PrismChecksDeferred"] = "g.13: счётчик отложенных проверок призматического маршрута (Interlocked, разбор)",

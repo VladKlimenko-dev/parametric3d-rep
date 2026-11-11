@@ -354,6 +354,9 @@ public static class BrepFile
     static Vector3d[]? SampleProc(ProcCurve3 c)
     {
         if (SampleReuseOff) return SampleProcOld(c);
+        // Adjacent run-out strips pinch to a point. Preserve their rail more accurately
+        // than the general export tolerance so independent surface/curve tables stay sewn.
+        double tolerance = c.Kind == "thread boundary" ? 1e-9 : 1e-7;
         // k156: середины, посчитанные для проверки уровня n, — это новые точки уровня 2n: каждая точка кривой считается один
         // раз (прежде — заново на каждом уровне; запись лофта с фаской — 18.5 с, из них 7.7 с — 76800 вычислений хребта).
         // Середины — все (без раннего выхода): они нужны следующему уровню. Мутация P3D_BREPSAMPLEREUSE=0.
@@ -369,7 +372,7 @@ public static class BrepFile
                 mids[i] = c.PointAt(c.T0 + (c.T1 - c.T0) * (i + 0.5) / n);
                 worst = Math.Max(worst, (CatmullRom(pts, (i + 0.5) / n) - mids[i]).Length);
             }
-            if (worst <= 1e-7) return pts;
+            if (worst <= tolerance) return pts;
             if (n * 2 > 65536) break;
             var next = new Vector3d[2 * n + 1];
             for (int i = 0; i < n; i++) { next[2 * i] = pts[i]; next[2 * i + 1] = mids[i]; }
@@ -383,6 +386,7 @@ public static class BrepFile
 
     static Vector3d[]? SampleProcOld(ProcCurve3 c)
     {
+        double tolerance = c.Kind == "thread boundary" ? 1e-9 : 1e-7;
         for (int n = 256; n <= 65536; n *= 2)
         {
             var pts = new Vector3d[n + 1];
@@ -392,9 +396,9 @@ public static class BrepFile
             {
                 double t = c.T0 + (c.T1 - c.T0) * (i + 0.5) / n;
                 worst = Math.Max(worst, (CatmullRom(pts, (i + 0.5) / n) - c.PointAt(t)).Length);
-                if (worst > 1e-7) break;
+                if (worst > tolerance) break;
             }
-            if (worst <= 1e-7) return pts;
+            if (worst <= tolerance) return pts;
         }
         return null;
     }

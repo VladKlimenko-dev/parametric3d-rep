@@ -34,10 +34,11 @@ static partial class Program
         var body = PrimitiveOp.Cylinder(Vector3d.Zero, spec.DMajor / 2, length);
         var context = new BuildContext { Part = new Part("thread bench"), Parameters = new ParameterTable() };
         context.Bodies.Add(body);
-        var feature = new CosmeticThreadFeature { TypeId = spec.Id, Cosmetic = false, Length = length, ShowPreview = mode == "preview" };
+        var feature = new CosmeticThreadFeature { TypeId = spec.Id, Cosmetic = false, Length = length,
+            ShowPreview = mode == "preview", SmoothExit = mode == "exit" };
         feature.OnFaces.Add(new Vector3d(spec.DMajor / 2, 0, length / 2));
         using var scope = new KernelContext(KernelSettings.Capture() with { Preview = mode == "preview" }).Enter();
-        long cellsBefore = DirectRound.ExactSweeps;
+        long cellsBefore = mode == "exit" ? DirectRound.ExactThreadCells : DirectRound.ExactSweeps;
         watch.Restart();
         feature.Execute(context);
         double firstMs = watch.Elapsed.TotalMilliseconds;
@@ -46,7 +47,7 @@ static partial class Program
             for (int i = 0; i < 10; i++) { watch.Restart(); feature.Execute(context); samples.Add(watch.Elapsed.TotalMilliseconds); }
         Log(new { phase = mode, length, ms = firstMs, warmMedianMs = samples.Count > 0 ? samples.Order().ElementAt(5) : (double?)null,
             route = feature.LastRoute, lines = feature.Lines?.Count,
-            cellsBuilt = DirectRound.ExactSweeps - cellsBefore,
+            cellsBuilt = (mode == "exit" ? DirectRound.ExactThreadCells : DirectRound.ExactSweeps) - cellsBefore,
             unchanged = context.Bodies.Count == 1 && ReferenceEquals(body, context.Bodies[0]),
             faces = context.Bodies.Sum(t => t.Faces.Count()),
             surfaces = context.Bodies.SelectMany(t => t.Faces).Select(f => GeometryAudit.AuthoritativeSurface(f).GetType().Name).Distinct().ToArray(),

@@ -1310,7 +1310,7 @@ public static partial class ExactFaceMesher
     public static long FoldReserveUsed;
     private static (List<Vector3d> P, List<int> T)? MeshUncachedCore(TFace f, out string? why, out List<Vector3d>? normals)
     {
-        if (FullSweepGrid(f) is { } sweepGrid)
+        if ((ThreadGrid(f) ?? FullSweepGrid(f)) is { } sweepGrid)
         {
             normals = sweepGrid.N; why = null;
             return (sweepGrid.P, sweepGrid.T);

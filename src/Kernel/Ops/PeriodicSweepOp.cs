@@ -72,7 +72,7 @@ public static class PeriodicSweepOp
         return result;
     }
 
-    private static void Join(TSolid left, TSolid right)
+    internal static void Join(TSolid left, TSolid right)
     {
         if (left.Shells.Count != 1 || right.Shells.Count != 1)
             throw new RebuildException(OperationOutcome.Unsupported, "Periodic sweep: cell must have one shell.");

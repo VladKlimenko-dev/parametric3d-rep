@@ -356,6 +356,7 @@ static partial class Program
         if (mode is "threadarchive") ThreadArchiveChecks();
         if (mode is "threadbench") { ThreadBench(args); return; }
         if (mode is "threadchecks") ThreadChecks();
+        if (mode is "threadexit") ThreadRunoutChecks();
         if (mode is "one")   // диагностика: один сценарий по идентификатору, трасса нового входа по PLANARDBG=1
         {
             if (Environment.GetEnvironmentVariable("PLANARDBG") == "1")

@@ -77,9 +77,6 @@ public sealed partial class CosmeticThreadFeature
         // helix/profile overlay, not an expensive boolean and not a committed solid.
         // Do not use KernelSettings.Preview alone: normal deferred validation also sets it.
         if (ShowPreview) { LastRoute = "overlay"; return; }
-        if (SmoothExit)
-            throw new RebuildException(OperationOutcome.Unsupported,
-                "Thread: exact smooth run-out is not implemented yet. The original body is unchanged.");
         using var exactScope = (KernelContext.Current ?? new KernelContext())
             .With(s => s with { GeometryPolicy = GeometryPolicy.PreserveBRep, Preview = false, LivePreview = false })
             .WithPolicy(OperationPolicy.Strict).Enter();
@@ -89,9 +86,12 @@ public sealed partial class CosmeticThreadFeature
         {
             KernelContext.Checkpoint("thread.publish");
             ctx.Bodies[0] = direct;
-            LastRoute = "direct-screw";
+            LastRoute = SmoothExit ? "direct-runout" : "direct-screw";
             return;
         }
+        if (SmoothExit)
+            throw new RebuildException(OperationOutcome.Unsupported,
+                "Thread: exact smooth run-out requires a single-start external trapezoid on an isolated cylinder. The original body is unchanged.");
         foreach (var tool in CutTools(spec, Internal, b0, u, e1, len, LeftHand, SmoothExit, r0))
         {
             KernelContext.Checkpoint("thread.cut");

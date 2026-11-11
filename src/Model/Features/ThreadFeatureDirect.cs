@@ -20,7 +20,7 @@ public sealed partial class CosmeticThreadFeature
         Vector3d b0, Vector3d axis, Vector3d radial, double len, double faceLength, double radius,
         bool left, bool smoothExit)
     {
-        if (inner || smoothExit || spec.Taper || Math.Abs(len - faceLength) > 1e-7
+        if (inner || spec.Taper || (!smoothExit && Math.Abs(len - faceLength) > 1e-7)
             || body.Faces.Count() != 3) return null;
         var caps = body.Faces.Where(f => !ReferenceEquals(f, selected)).ToArray();
         if (caps.Length != 2 || caps.Any(f => GeometryAudit.AuthoritativeSurface(f) is not PlaneSurface
@@ -30,14 +30,20 @@ public sealed partial class CosmeticThreadFeature
             var plane = (PlaneSurface)GeometryAudit.AuthoritativeSurface(f)!;
             if (Math.Abs(Vector3d.Dot(plane.F.W, axis)) < 1 - 1e-10) return null;
             double z = Vector3d.Dot(plane.F.Origin - b0, axis);
-            if (Math.Min(Math.Abs(z), Math.Abs(z - len)) > 1e-7) return null;
+            if (Math.Min(Math.Abs(z), Math.Abs(z - faceLength)) > 1e-7) return null;
         }
         // The selected surface must be a complete circular wall; no trimmed window/side opening.
         var boundary = selected.Loops.SelectMany(l => l.CoEdges).Select(c => c.Edge.Curve).ToArray();
         if (boundary.Any(c => c is not (ArcCurve3 or LineCurve3))
             || boundary.OfType<ArcCurve3>().Sum(a => Math.Abs(a.A1 - a.A0)) < 4 * Math.PI - 1e-8) return null;
-        var profile = ThreadSection(spec, radius, new Frame3(b0, radial, Vector3d.Cross(axis, radial)), left);
         double lead = spec.Lead > 0 ? spec.Lead : spec.P * Math.Max(1, spec.Starts);
+        var frame = new Frame3(b0, radial, Vector3d.Cross(axis, radial));
+        if (smoothExit)
+        {
+            if (spec.Starts != 1 || Math.Abs(lead - spec.P) > 1e-9) return null;
+            return ThreadRunoutOp.Build(frame, lead, faceLength, len, radius, spec.ExtZr, left);
+        }
+        var profile = ThreadSection(spec, radius, frame, left);
         return PeriodicSweepOp.Build(profile, lead, len, left);
     }
 

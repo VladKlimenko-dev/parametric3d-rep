@@ -59,12 +59,12 @@ static partial class Program
                 }
             Require(DirectRound.ExactSweeps == before, "preview built exact sweeps");
         });
-        Check("THREAD-EXIT-REFUSAL-ATOMIC", () =>
+        Check("THREAD-SHORT-EXIT-REFUSAL-ATOMIC", () =>
         {
             var body = PrimitiveOp.Cylinder(Vector3d.Zero, 3, 2);
             var ctx = new BuildContext { Part = new Part("exit refusal"), Parameters = new ParameterTable() };
             ctx.Bodies.Add(body);
-            var f = new CosmeticThreadFeature { TypeId = spec.Id, Cosmetic = false, Length = 2, SmoothExit = true };
+            var f = new CosmeticThreadFeature { TypeId = spec.Id, Cosmetic = false, Length = 0.4, SmoothExit = true };
             f.OnFaces.Add(new Vector3d(3, 0, 1));
             bool refused = false;
             try { f.Execute(ctx); } catch (RebuildException) { refused = true; }

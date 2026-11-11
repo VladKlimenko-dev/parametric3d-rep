@@ -770,8 +770,44 @@ public static class AnalyticVolume
     }
     static readonly bool BandRangeCacheOff = Environment.GetEnvironmentVariable("P3D_BANDRANGECACHE") == "0";
 
+    static bool WholeThreadPatch(TFace f, SectionSurface ss)
+    {
+        if (f.Tag?.StartsWith("sweep:side[thread.") != true || ss.Closed || f.Loops.Count != 1
+            || f.Loops[0].CoEdges.Count is < 3 or > 4) return false;
+        var unused = f.Edges.ToList();
+        for (int side = 0; side < 4; side++)
+        {
+            Vector3d At(double t) => ss.PointAt(side switch
+            {
+                0 => new Vector2d(ss.UMin, t), 1 => new Vector2d(ss.UMax, t),
+                2 => new Vector2d(ss.UMin + (ss.UMax - ss.UMin) * t, 0),
+                _ => new Vector2d(ss.UMin + (ss.UMax - ss.UMin) * t, 1)
+            });
+            var a = At(0); var b = At(1);
+            if (side < 2 && (a - b).Length < 1e-9
+                && Enumerable.Range(0, 17).All(k => (At(k / 16.0) - a).Length < 1e-9)) continue;
+            int found = unused.FindIndex(e =>
+            {
+                var curve = e.Curve;
+                bool reverse = (curve.PointAt(curve.T0) - a).Length > (curve.PointAt(curve.T1) - a).Length;
+                return Enumerable.Range(0, 33).All(k =>
+                {
+                    double t = k / 32.0;
+                    return (At(t) - curve.PointAt(curve.T0 + (curve.T1 - curve.T0) * (reverse ? 1 - t : t))).Length < 1e-8;
+                });
+            });
+            if (found < 0) return false;
+            unused.RemoveAt(found);
+        }
+        return unused.Count == 0;
+    }
+
     static (Func<double, double> L, Func<double, double> R)? BandOpenRangeCore(TFace f, SectionSurface ss)
     {
+        // A thread strip can have a collapsed u-end. Its physical loop is triangular,
+        // but its parameter domain remains the full rectangle. Verify all four images,
+        // including the missing zero-length side, before integrating that domain.
+        if (WholeThreadPatch(f, ss)) return (_ => ss.UMin, _ => ss.UMax);
         bool at0 = false, at1 = false; var sides = new List<(ICurve3 C, double UMid)>();
         // k148e: БОКОВАЯ СТОРОНА ИЗ НЕСКОЛЬКИХ РЁБЕР (торец новой ленты режет край прежней: сторона — край новой ленты от v = 0
         // до v* и остаток прежнего края от v* до 1). Рёбра между краями v = 0 и v = 1 по порядку контура — цепочка; v по
@@ -908,7 +944,7 @@ public static class AnalyticVolume
         // Still compare genuinely different u AND v quadratures; on disagreement use
         // the established dense path below. No acceptance/volume check is disabled.
         if (f.Tag?.StartsWith("sweep:side[") == true && f.Loops.Count == 1
-            && f.Loops[0].CoEdges.Count == 4 && ss.Breaks.Count == 0)
+            && (f.Loops[0].CoEdges.Count == 4 || WholeThreadPatch(f, ss)) && ss.Breaks.Count == 0)
         {
             var fineSweep = BandOpenIntegralAt(f, ss, rg, area, 8, 2);
             var coarseSweep = BandOpenIntegralAt(f, ss, rg, area, 4, 1);
