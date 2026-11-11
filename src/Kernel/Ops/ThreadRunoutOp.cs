@@ -14,11 +14,15 @@ public static class ThreadRunoutOp
         double radius, IReadOnlyList<Vector2d> profile, bool left, bool smoothExit = true)
     {
         var law = new ThreadRunoutLaw(frame, lead, height, length, radius, profile, left, smoothExit);
-        int count = Math.Max(0, (int)Math.Floor((smoothExit ? law.Start + law.LeftBase : height) / lead + 1e-10));
+        bool partial = length < height - 1e-9;
+        // Abrupt partial ending: copied cells stay strictly below the stop plane z = length.
+        int count = Math.Max(0, smoothExit ? (int)Math.Floor((law.Start + law.LeftBase) / lead + 1e-10)
+            : partial ? (int)Math.Ceiling(length / lead - 1e-10) - 1 : (int)Math.Floor(height / lead + 1e-10));
         double prefix = count * lead;
         // The same phase partition in both builders makes the seam an identical edge cycle.
-        // Past full withdrawal (z = End + Q1) the blank stays one plain cylinder face.
-        double plainFrom = smoothExit && law.End + law.Q1 < height - 1e-9 ? law.End + law.Q1 : double.NaN;
+        // Past full withdrawal (z = End + Q1 = length) the blank stays one plain cylinder face;
+        // without the exit the groove stops at that plane with a flat step face.
+        double plainFrom = partial ? length : double.NaN;
         var phases = law.Phases(prefix, plainFrom);
         TSolid Cell(double a, double b, bool full)
         {
@@ -84,8 +88,6 @@ internal sealed class ThreadRunoutLaw
             || profile.Count != 4 || profile.Any(p => !double.IsFinite(p.X + p.Y)))
             throw new RebuildException(OperationOutcome.InvalidInput, "Thread run-out: invalid blank or trapezoid.");
         Frame = frame; Lead = lead; Height = height; Radius = radius; Left = left; SmoothExit = smoothExit;
-        if (!smoothExit && Math.Abs(length - height) > 1e-9)
-            throw new RebuildException(OperationOutcome.Unsupported, "Thread: an abrupt partial-length ending requires a separate end cut.");
         var p = profile.OrderBy(x => x.Y).ThenBy(x => x.X).ToArray();
         Root = p[0].Y; Q0 = p[0].X; Q1 = p[1].X;
         if (Math.Abs(p[1].Y - Root) > 1e-12 || Math.Abs(p[2].Y - p[3].Y) > 1e-12

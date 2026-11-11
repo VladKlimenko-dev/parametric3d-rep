@@ -78,7 +78,8 @@ static partial class Program
             }
         // User repro: thread only half of the blank; the rest must stay one cylinder face.
         if (Environment.GetEnvironmentVariable("P3D_THREADCASE") is not { } halfFilter || "THREAD-CYLINDER-HALF".Contains(halfFilter))
-            Check("THREAD-CYLINDER-HALF-M10-H200-L100", () =>
+            foreach (bool exit in new[] { true, false })
+            Check("THREAD-CYLINDER-HALF-M10-H200-L100-EXIT" + exit, () =>
             {
                 var part = new Part("half thread");
                 var sketch = new Sketch("circle", Frame3.XY); part.Add(sketch);
@@ -89,7 +90,7 @@ static partial class Program
                 extrusion.Execute(ctx);
                 var blank = ctx.Bodies.Single();
                 var spec = Parametric3D.Model.Threads.ThreadDb.All.First(t => t.Designation == "M10" && t.Series == "coarse");
-                var feature = new CosmeticThreadFeature { TypeId = spec.Id, Cosmetic = false, SmoothExit = true };
+                var feature = new CosmeticThreadFeature { TypeId = spec.Id, Cosmetic = false, SmoothExit = exit };
                 feature.Length = new(100);
                 feature.OnFaces.Add(FaceRefs.Inside(blank.Faces.Single(f =>
                     GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.ExtrudedSurface)));
@@ -101,22 +102,23 @@ static partial class Program
                 var valid = SolidValidator.Validate(body);
                 Require(valid.IsValid, valid.Summary());
                 Require(body.Guarantee == GuaranteeLevel.ExactAnalytic, "thread is not exact");
-                Require(feature.LastRoute == "direct-runout", "wrong route: " + feature.LastRoute);
+                Require(feature.LastRoute == (exit ? "direct-runout" : "direct-screw"), "wrong route: " + feature.LastRoute);
                 Require(Math.Abs(feature.ThreadLen - 100) < 1e-8, "length");
                 // Faces lying wholly in the unthreaded part z > 100 (beyond the cap at z = 200).
                 // The thread may start from either end; count faces wholly on each side of z = 100.
-                int Side(int sign) => body.Faces.Count(f => !f.Tag.StartsWith("cap:") && f.Loops.SelectMany(l => l.CoEdges)
+                int Side(int sign) => body.Faces.Count(f => !f.Tag.StartsWith("cap:") && f.Tag != "thread:stop" && f.Loops.SelectMany(l => l.CoEdges)
                     .All(c => sign * (c.Edge.V0.P.Z - 100) > -1e-6 && sign * (c.Edge.V1.P.Z - 100) > -1e-6));
                 int tail = Math.Min(Side(1), Side(-1));
                 Require(tail == 1, "unthreaded blank split into " + tail + " faces");
                 Require(body.Faces.Any(f => GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.ExtrudedSurface), "no plain cylinder");
                 double volume = AnalyticVolume.Of(body) ?? double.NaN;
-                double expected = ExitVolumeOracle(spec, 5, 200, 100);
+                double expected = exit ? ExitVolumeOracle(spec, 5, 200, 100) : HalfAbruptVolume(spec, 5, 200, 100);
+                if (!exit) Require(body.Faces.Count(f => f.Tag == "thread:stop") == 1, "no flat thread stop face");
                 Require(Math.Abs(volume - expected) < expected * 2e-6, $"independent volume integral {volume} vs {expected}");
                 Require(body.Edges.All(e => e.CoEdges.Count == 2), "unsewn B-rep boundary");
                 long built = DirectRound.ExactThreadCells + DirectRound.ExactSweeps - before;
                 Require(built is >= 1 and <= 2, "repeated turns were rebuilt");
-                Log(new { test = "THREAD-CYLINDER-HALF-METRICS", ms, volume, expected, built, faces = body.Faces.Count(), tail });
+                Log(new { test = "THREAD-CYLINDER-HALF-METRICS", exit, ms, volume, expected, built, faces = body.Faces.Count(), tail });
             });
         // Keep the general periodic sweep covered now that standard trapezoids use ruled strips.
         foreach (bool left in new[] { false, true })
@@ -133,5 +135,16 @@ static partial class Program
                 Require(double.IsFinite(cached) && double.IsFinite(uncached)
                     && Math.Abs(cached - uncached) < Math.Abs(cached) * 1e-8, "periodic composed volume");
             });
+    }
+
+    /// <summary>Constant helical-groove section over [0, length], untouched blank above.</summary>
+    static double HalfAbruptVolume(Parametric3D.Model.Threads.ThreadSpec spec, double radius, double height, double length)
+    {
+        var p = spec.ExtZr.OrderBy(v => v.Y).ThenBy(v => v.X).ToArray();
+        double root = p[0].Y, ml = (p[2].Y - root) / (p[2].X - p[0].X), mr = (p[3].Y - root) / (p[3].X - p[1].X);
+        double x0 = p[0].X + (radius - root) / ml, x1 = p[1].X + (radius - root) / mr;
+        double area = Math.PI / spec.P * (radius * radius * (spec.P - x1 + x0) + root * root * (p[1].X - p[0].X)
+            + (Math.Pow(radius, 3) - Math.Pow(root, 3)) / 3 * (1 / mr - 1 / ml));
+        return area * length + Math.PI * radius * radius * (height - length);
     }
 }

@@ -135,7 +135,35 @@ public static partial class DirectRound
                 var wall = new FDesc { Surf = new ExtrudedSurface(ArcCurve3.FullCircle(new Frame3(law.Frame.Origin, law.Frame.U, law.Frame.V), law.Radius), law.Frame.W),
                     Tag = "sweep:side[thread.blank]", Touched = true, IsCyl = true, AxO = law.Frame.Origin, AxW = law.Frame.W, AxR = law.Radius,
                     Hint = law.Frame.Origin + law.Frame.W * ((zb + zTop) / 2) + law.Frame.U * law.Radius };
-                wall.Loops.Add(ordered);
+                var center = law.Frame.Origin + law.Frame.W * zb;
+                double Radial(Vector3d p) { var d = p - center; return (d - law.Frame.W * Vector3d.Dot(d, law.Frame.W)).Length; }
+                bool OnBlank(Seg g) => Math.Abs(Radial(g.A) - law.Radius) < 1e-8 && Math.Abs(Radial(g.B) - law.Radius) < 1e-8
+                    && Math.Abs(Radial(g.Curve.PointAt((g.Curve.T0 + g.Curve.T1) / 2)) - law.Radius) < 1e-8;
+                int n = ordered.Count, from = Enumerable.Range(0, n).FirstOrDefault(i => !OnBlank(ordered[i]) && OnBlank(ordered[(i + n - 1) % n]), -1);
+                if (ordered.Any(g => !OnBlank(g)))
+                {
+                    // Abrupt ending: the groove stops at z = zb with a flat step face.
+                    if (from < 0) { why = "thread stop section has no blank arc"; return null; }
+                    var chain = ordered.Skip(from).Concat(ordered.Take(from)).ToList();
+                    int grooveCount = chain.TakeWhile(g => !OnBlank(g)).Count();
+                    var groove = chain.Take(grooveCount).ToList(); var crest = chain.Skip(grooveCount).ToList();
+                    if (crest.Any(g => !OnBlank(g))) { why = "thread stop section has several grooves"; return null; }
+                    double Angle(Vector3d p) => Math.Atan2(Vector3d.Dot(p - center, law.Frame.V), Vector3d.Dot(p - center, law.Frame.U));
+                    var p1 = groove[0].A; var p2 = groove[^1].B;
+                    var deep = groove[grooveCount / 2].Curve; var mid = deep.PointAt((deep.T0 + deep.T1) / 2);
+                    double a1 = Angle(p1), sweep = Angle(p2) - a1, inside = Angle(mid) - a1;
+                    sweep -= 2 * Math.PI * Math.Floor(sweep / (2 * Math.PI)); inside -= 2 * Math.PI * Math.Floor(inside / (2 * Math.PI));
+                    if (inside > sweep) sweep -= 2 * Math.PI;
+                    var arc = new ArcCurve3(new Frame3(center, law.Frame.U, law.Frame.V), law.Radius, a1, a1 + sweep);
+                    crest.Add(new Seg { Curve = arc, A = p1, B = p2 });
+                    wall.Loops.Add(crest);
+                    var radial = (mid - center).Normalized();
+                    var stop = new FDesc { Surf = new PlaneSurface(Frame3.FromNormal(center, -normal)), Tag = "thread:stop", N = -normal,
+                        Hint = center + radial * ((Radial(mid) + law.Radius) / 2) };
+                    groove.Add(new Seg { Curve = arc, A = p2, B = p1 });
+                    stop.Loops.Add(groove); faces.Add(stop);
+                }
+                else wall.Loops.Add(ordered);
                 wall.Loops.Add(new List<Seg> { new() { Curve = circle, A = p0, B = p0 } });
                 faces.Add(wall);
                 cap = new FDesc { Surf = new PlaneSurface(Frame3.FromNormal(top, normal)), Tag = "cap:end", N = normal, Hint = top };
