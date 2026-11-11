@@ -11,8 +11,12 @@ public static partial class DirectRound
 
     /// <summary>Analytic ruled strips, clipped by the blank's end planes before topology assembly.</summary>
     internal static TSolid? ThreadCell(ThreadRunoutLaw law, double za, double zb, bool full,
-        IReadOnlyList<double> phases, ref string? why)
+        IReadOnlyList<double> phases, ref string? why, double plainFrom = double.NaN)
     {
+        // Past the full withdrawal the blank is untouched: one exact cylinder face, not helical strips.
+        bool plain = double.IsFinite(plainFrom) && plainFrom > za + 1e-9 && plainFrom < zb - 1e-9;
+        double zTop = zb;
+        if (plain) zb = plainFrom;
         var faces = new List<FDesc>();
         var caps = new[] { new List<Seg>(), new List<Seg>() };
         var times = new List<double>();
@@ -123,7 +127,22 @@ public static partial class DirectRound
             var origin = law.Frame.Origin + law.Frame.W * (c == 0 ? za : zb);
             var cap = new FDesc { Surf = new PlaneSurface(Frame3.FromNormal(origin, normal)),
                 Tag = c == 0 ? "cap:start" : "cap:end", N = normal, Hint = origin };
-            cap.Loops.Add(ordered); faces.Add(cap);
+            if (c == 1 && plain)
+            {
+                var top = law.Frame.Origin + law.Frame.W * zTop;
+                var circle = ArcCurve3.FullCircle(new Frame3(top, law.Frame.U, law.Frame.V), law.Radius);
+                var p0 = circle.PointAt(circle.T0);
+                var wall = new FDesc { Surf = new ExtrudedSurface(ArcCurve3.FullCircle(new Frame3(law.Frame.Origin, law.Frame.U, law.Frame.V), law.Radius), law.Frame.W),
+                    Tag = "sweep:side[thread.blank]", Touched = true, IsCyl = true, AxO = law.Frame.Origin, AxW = law.Frame.W, AxR = law.Radius,
+                    Hint = law.Frame.Origin + law.Frame.W * ((zb + zTop) / 2) + law.Frame.U * law.Radius };
+                wall.Loops.Add(ordered);
+                wall.Loops.Add(new List<Seg> { new() { Curve = circle, A = p0, B = p0 } });
+                faces.Add(wall);
+                cap = new FDesc { Surf = new PlaneSurface(Frame3.FromNormal(top, normal)), Tag = "cap:end", N = normal, Hint = top };
+                cap.Loops.Add(new List<Seg> { new() { Curve = circle, A = p0, B = p0 } });
+            }
+            else cap.Loops.Add(ordered);
+            faces.Add(cap);
         }
         var result = FinishDirect(faces, new List<FDesc>(), "thread.runout", ref why);
         if (result != null) Interlocked.Increment(ref ExactThreadCells);

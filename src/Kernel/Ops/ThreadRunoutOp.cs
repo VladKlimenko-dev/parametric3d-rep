@@ -17,12 +17,14 @@ public static class ThreadRunoutOp
         int count = Math.Max(0, (int)Math.Floor((smoothExit ? law.Start + law.LeftBase : height) / lead + 1e-10));
         double prefix = count * lead;
         // The same phase partition in both builders makes the seam an identical edge cycle.
-        var phases = law.Phases(prefix);
+        // Past full withdrawal (z = End + Q1) the blank stays one plain cylinder face.
+        double plainFrom = smoothExit && law.End + law.Q1 < height - 1e-9 ? law.End + law.Q1 : double.NaN;
+        var phases = law.Phases(prefix, plainFrom);
         TSolid Cell(double a, double b, bool full)
         {
             KernelContext.Checkpoint("thread.cell");
             string? why = null;
-            return DirectRound.ThreadCell(law, a, b, full, phases, ref why)
+            return DirectRound.ThreadCell(law, a, b, full, phases, ref why, plainFrom)
                 ?? throw new RebuildException(OperationOutcome.Unsupported, "Thread run-out: " + why);
         }
         if (count == 0) return Cell(0, height, !smoothExit);
@@ -127,11 +129,11 @@ internal sealed class ThreadRunoutLaw
         };
     }
 
-    internal double[] Phases(double prefix)
+    internal double[] Phases(double prefix, double plainFrom = double.NaN)
     {
         var values = new List<double> { 0, Lead / 4, Lead / 2, 3 * Lead / 4 };
         if (SmoothExit) { values.Add(Start); values.Add(End); }
-        foreach (double z in new[] { 0.0, Lead, prefix, Height })
+        foreach (double z in new[] { 0.0, Lead, prefix, Height, plainFrom }.Where(double.IsFinite))
             foreach (bool full in new[] { true, false })
                 for (int id = 0; id < 5; id++)
                 {

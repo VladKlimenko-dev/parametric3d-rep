@@ -76,6 +76,48 @@ static partial class Program
                         feature.LastRoute, volume, expected, built, faces = body.Faces.Count() });
                 });
             }
+        // User repro: thread only half of the blank; the rest must stay one cylinder face.
+        if (Environment.GetEnvironmentVariable("P3D_THREADCASE") is not { } halfFilter || "THREAD-CYLINDER-HALF".Contains(halfFilter))
+            Check("THREAD-CYLINDER-HALF-M10-H200-L100", () =>
+            {
+                var part = new Part("half thread");
+                var sketch = new Sketch("circle", Frame3.XY); part.Add(sketch);
+                sketch.AddEntity(new SkCircle(new SkPoint(0, 0), 5));
+                var ctx = new BuildContext { Part = part, Parameters = new ParameterTable() };
+                var extrusion = new ExtrudeFeature { SketchId = sketch.Id };
+                extrusion.Side1.Distance = 200;
+                extrusion.Execute(ctx);
+                var blank = ctx.Bodies.Single();
+                var spec = Parametric3D.Model.Threads.ThreadDb.All.First(t => t.Designation == "M10" && t.Series == "coarse");
+                var feature = new CosmeticThreadFeature { TypeId = spec.Id, Cosmetic = false, SmoothExit = true };
+                feature.Length = new(100);
+                feature.OnFaces.Add(FaceRefs.Inside(blank.Faces.Single(f =>
+                    GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.ExtrudedSurface)));
+                long before = DirectRound.ExactThreadCells + DirectRound.ExactSweeps;
+                var watch = Stopwatch.StartNew();
+                feature.Execute(ctx);
+                double ms = watch.Elapsed.TotalMilliseconds;
+                var body = ctx.Bodies.Single();
+                var valid = SolidValidator.Validate(body);
+                Require(valid.IsValid, valid.Summary());
+                Require(body.Guarantee == GuaranteeLevel.ExactAnalytic, "thread is not exact");
+                Require(feature.LastRoute == "direct-runout", "wrong route: " + feature.LastRoute);
+                Require(Math.Abs(feature.ThreadLen - 100) < 1e-8, "length");
+                // Faces lying wholly in the unthreaded part z > 100 (beyond the cap at z = 200).
+                // The thread may start from either end; count faces wholly on each side of z = 100.
+                int Side(int sign) => body.Faces.Count(f => !f.Tag.StartsWith("cap:") && f.Loops.SelectMany(l => l.CoEdges)
+                    .All(c => sign * (c.Edge.V0.P.Z - 100) > -1e-6 && sign * (c.Edge.V1.P.Z - 100) > -1e-6));
+                int tail = Math.Min(Side(1), Side(-1));
+                Require(tail == 1, "unthreaded blank split into " + tail + " faces");
+                Require(body.Faces.Any(f => GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.ExtrudedSurface), "no plain cylinder");
+                double volume = AnalyticVolume.Of(body) ?? double.NaN;
+                double expected = ExitVolumeOracle(spec, 5, 200, 100);
+                Require(Math.Abs(volume - expected) < expected * 2e-6, $"independent volume integral {volume} vs {expected}");
+                Require(body.Edges.All(e => e.CoEdges.Count == 2), "unsewn B-rep boundary");
+                long built = DirectRound.ExactThreadCells + DirectRound.ExactSweeps - before;
+                Require(built is >= 1 and <= 2, "repeated turns were rebuilt");
+                Log(new { test = "THREAD-CYLINDER-HALF-METRICS", ms, volume, expected, built, faces = body.Faces.Count(), tail });
+            });
         // Keep the general periodic sweep covered now that standard trapezoids use ruled strips.
         foreach (bool left in new[] { false, true })
             Check("THREAD-PERIODIC-GENERAL-" + left, () =>
