@@ -31,10 +31,16 @@ public sealed partial class CosmeticThreadOp : FeatureOp<CosmeticThreadFeature>
         Accept = r => r.Kind is PickKind.Face or PickKind.Vertex or PickKind.SketchPoint or PickKind.DatumPoint,
     };
 
+    static readonly bool ThreadFaceFieldOff = Environment.GetEnvironmentVariable("P3D_THREADFACEFIELD") == "0";
+    private bool ThreadFace(PickRef r) => r.Kind == PickKind.Face
+        && (ThreadFaceFieldOff || ((r.Owner as Part ?? Part)?.FindFace(r.Id) is not { } f || CosmeticThreadFeature.IsThreadFace(f)));
+
     public override void Build(OpPanel p)
     {
         F.ShowPreview = true;
-        _face = p.Ref(new RefField { Label = "Цилиндрическая грань", Filter = PickFilter.Faces, Accept = r => r.Kind == PickKind.Face, Single = true });
+        // k187: only a face the thread rebuild accepts (cylinder, circular extrude, revolved segment parallel to the axis) — a chain
+        // neighbour or a chamfer under the pointer no longer lands in the field and fails the rebuild. P3D_THREADFACEFIELD=0 — any face.
+        _face = p.Ref(new RefField { Label = "Цилиндрическая грань", Filter = PickFilter.Faces, Accept = ThreadFace, Prefer = ThreadFaceFieldOff ? null : ThreadFace, Single = true });
         if (Editing) _face.Kept = F.OnFaces.Count;
         _face.KeptLabel = () => FaceLabel(F.FaceId);
         _face.HoverIds = () => new[] { F.FaceId };

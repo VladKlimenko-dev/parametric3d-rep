@@ -10,6 +10,21 @@ namespace Parametric3D.Model.Features;
 // Перестроение резьбы: грань → ось, торцы, начало и длина; вид; вырез.
 public sealed partial class CosmeticThreadFeature
 {
+    /// <summary>
+    /// k187: axis of a face a thread can go on (cylinder, circular extrude, revolve of a segment parallel to the axis);
+    /// null — not such a face. One rule for the rebuild and for the face field of the thread panel.
+    /// </summary>
+    public static (Vector3d O, Vector3d W)? ThreadAxis(Kernel.Topology.TFace f) => GeometryAudit.AuthoritativeSurface(f) switch
+    {
+        Kernel.Surfaces.CylinderSurface cs => (cs.Axis.Origin, cs.Axis.W.Normalized()),
+        Kernel.Surfaces.ExtrudedSurface { Base: Kernel.Curves.ArcCurve3 ba } es when Math.Abs(Math.Abs(Vector3d.Dot(ba.Frame.W.Normalized(), es.Dir.Normalized())) - 1) < 1e-9 => (ba.Frame.Origin, es.Dir.Normalized()),
+        // a revolve of a segment parallel to its axis is a cylinder (a revolved part: fishing neck etc.); P3D_THREADREVCYL=0 — refused
+        Kernel.Surfaces.RevolvedSurface { Base: Kernel.Curves.LineCurve3 gl } rv when !DirectRound.RevCylOff && DirectRound.RevolvedCylinder(rv, gl) => (rv.Axis.Origin, rv.Axis.W.Normalized()),
+        _ => null,
+    };
+    /// <summary>k187: the thread rebuild accepts this face (axis and radius).</summary>
+    public static bool IsThreadFace(Kernel.Topology.TFace f) => ThreadAxis(f) != null && DirectEdit.RadiusAfter(f, 0) != null && DirectEdit.RadiusAfter(f, 1) != null;
+
     public override void Execute(BuildContext ctx)
     {
         Lines = null;
@@ -18,17 +33,10 @@ public sealed partial class CosmeticThreadFeature
         if (ctx.Bodies.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: no body.");
         if (OnFaces.Count == 0) throw new RebuildException(OperationOutcome.InvalidInput, "Thread: no face selected.");
         var f = FacePick.Resolve(ctx.Bodies[0], OnFaces, OnFaceNames, "Thread")[0];
-        var srf = GeometryAudit.AuthoritativeSurface(f);
-        (Vector3d O, Vector3d W)? axis = srf switch
-        {
-            Kernel.Surfaces.CylinderSurface cs => (cs.Axis.Origin, cs.Axis.W.Normalized()),
-            Kernel.Surfaces.ExtrudedSurface { Base: Kernel.Curves.ArcCurve3 ba } es when Math.Abs(Math.Abs(Vector3d.Dot(ba.Frame.W.Normalized(), es.Dir.Normalized())) - 1) < 1e-9 => (ba.Frame.Origin, es.Dir.Normalized()),
-            // a revolve of a segment parallel to its axis is a cylinder (a revolved part: fishing neck etc.); P3D_THREADREVCYL=0 — refused
-            Kernel.Surfaces.RevolvedSurface { Base: Kernel.Curves.LineCurve3 gl } rv when !DirectRound.RevCylOff && DirectRound.RevolvedCylinder(rv, gl) => (rv.Axis.Origin, rv.Axis.W.Normalized()),
-            _ => null,
-        };
+        var axis = ThreadAxis(f);
         if (axis == null || DirectEdit.RadiusAfter(f, 0) is not { } r0 || DirectEdit.RadiusAfter(f, 1) is not { } r1)
-            throw new RebuildException(OperationOutcome.InvalidInput, "Thread: the face is not cylindrical.");
+            throw new RebuildException(OperationOutcome.InvalidInput,
+                $"Thread: the face is not cylindrical ({GeometryAudit.AuthoritativeSurface(f)?.GetType().Name ?? "no surface"}, face {f.Id}).");
         Diameter = 2 * r0;
         Internal = r1 < r0;
         var o = axis.Value.O; var w = axis.Value.W;
