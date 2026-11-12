@@ -82,6 +82,8 @@ internal sealed class ThreadRunoutLaw
     internal readonly bool Left, SmoothExit;
     /// <summary>Radial growth per unit of tool travel (tan of the half cone angle), as in ToolFrame.</summary>
     internal readonly double Taper;
+    /// <summary>Withdrawal amplitude: the depth still left at the exit end after the taper rise.</summary>
+    internal readonly double Amp;
     /// <summary>Crest-cone radius at z = 0 (tapered threads); +inf — the crest is the blank itself.</summary>
     internal readonly double Crest0;
 
@@ -117,7 +119,14 @@ internal sealed class ThreadRunoutLaw
         Span = Math.Min(lead, length + LeftBase - Q1);
         // This bound proves t+qRight(t) is strictly monotone throughout the cubic withdrawal.
         // Together with nonoverlapping turns it rules out folds and permits bracketed cap roots.
-        if (smoothExit && Span <= 1.5 * Depth / (MR - taper) * (1 + 1e-8) || taper >= MR || taper >= -ML)
+        // With taper the root has already risen by taper·End, so only the remaining depth is withdrawn
+        // and the groove lands on the blank exactly at End. Peak offset rate: taper + 1.5·Amp/Span.
+        // Right flank: Q' = -Offset'/MR where the crest is on the blank, so the rate must stay below MR.
+        // Left flank on a turned-down crest: Q' = (Crest'(t-Lead) - Offset'(t))/ML, so also below -ML.
+        Amp = taper > 0 ? Math.Max(0, Depth - taper * End) : Depth;
+        double rate = 1.5 * Amp / Span * (1 + 1e-8);
+        if (smoothExit && (Span <= 0 || taper + rate >= MR || double.IsFinite(crest) && taper + rate >= -ML)
+            || taper >= MR || taper >= -ML)
             throw new RebuildException(OperationOutcome.InvalidInput, "Thread run-out: length is too short for a nonfolding smooth exit.");
         Start = End - Span;
         Omega = (left ? -1 : 1) * 2 * Math.PI / lead;
@@ -128,8 +137,8 @@ internal sealed class ThreadRunoutLaw
         (double D, double Derivative) d = (0, 0);
         if (SmoothExit && !full && t > Start)
         {
-            if (t >= End) d = (Depth, 0);
-            else { double s = (t - Start) / Span; d = (Depth * s * s * (3 - 2 * s), Depth * 6 * s * (1 - s) / Span); }
+            if (t >= End) d = (Amp, 0);
+            else { double s = (t - Start) / Span; d = (Amp * s * s * (3 - 2 * s), Amp * 6 * s * (1 - s) / Span); }
         }
         if (Taper == 0) return d;
         // Taper raises the whole tool section; once it reaches the blank the groove has vanished.

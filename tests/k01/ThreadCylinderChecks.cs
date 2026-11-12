@@ -121,7 +121,7 @@ static partial class Program
                 Log(new { test = "THREAD-CYLINDER-HALF-METRICS", exit, ms, volume, expected, built, faces = body.Faces.Count(), tail });
             });
         // User repro: 1/2-14 NPT (taper 1:16) on a plain Ø21 cylinder, built directly as one tapered cell.
-        foreach (var (exit, length, rad) in new[] { (true, 30.0, 10.5), (false, 30.0, 10.5), (false, 15.0, 10.5), (false, 30.0, 11.5), (false, 15.0, 11.5) })
+        foreach (var (exit, length, rad) in new[] { (true, 30.0, 10.5), (false, 30.0, 10.5), (false, 15.0, 10.5), (true, 30.0, 11.5), (false, 30.0, 11.5), (false, 15.0, 11.5) })
         {
             string tid = $"THREAD-CYLINDER-NPT-D{2 * rad:0}-H30-L{length}-EXIT{exit}";
             if (Environment.GetEnvironmentVariable("P3D_THREADCASE") is { } tf && !tid.Contains(tf)) continue;
@@ -152,7 +152,9 @@ static partial class Program
                 double volume = AnalyticVolume.Of(body) ?? double.NaN;
                 double uncached = AnalyticVolume.OfUncached(body) ?? double.NaN;
                 double taper = Math.Tan(spec.HalfConeDeg * Math.PI / 180);
-                double expected = TaperVolumeOracle(spec, rad, 30, length, exit, taper);
+                double q1 = spec.ExtZr.OrderBy(v => v.Y).ThenBy(v => v.X).Skip(1).First().X;
+                double turned = exit && length >= 30 ? Math.Min(rad, spec.DMajor / 2 + taper * (length - q1 - spec.Lead) - 1e-6) : rad;
+                double expected = TaperVolumeOracle(spec, turned, 30, length, exit, taper);
                 Require(Math.Abs(volume - expected) < expected * 2e-6 && Math.Abs(uncached - expected) < expected * 2e-6,
                     $"independent volume integral {volume} / {uncached} vs {expected}");
                 Require(BooleanOp.VolumeVsFacets(body) is not { Agree: false }, "display/boundary volume mismatch");
@@ -200,7 +202,8 @@ static partial class Program
         double D(double t)
         {
             double s = exit ? Math.Clamp((t - start) / span, 0, 1) : 0;
-            return Math.Min(depth, depth * s * s * (3 - 2 * s) + taper * t);
+            double amp = taper > 0 ? Math.Max(0, depth - taper * end) : depth;
+            return Math.Min(depth, amp * s * s * (3 - 2 * s) + taper * t);
         }
         double C(double t) => Math.Min(radius, crest0 + D(t));
         double SectionLoss(double t)

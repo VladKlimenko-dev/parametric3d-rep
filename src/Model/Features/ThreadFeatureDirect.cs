@@ -45,7 +45,16 @@ public sealed partial class CosmeticThreadFeature
         if (smoothExit)
         {
             if (spec.Starts != 1 || Math.Abs(lead - spec.P) > 1e-9) return null;
-            return ThreadRunoutOp.Build(frame, lead, faceLength, len, radius, spec.ExtZr, left, taper: taper, crest: crest);
+            // Oversized blank threaded over its full length: as on a lathe, the stock is first turned down.
+            // The withdrawal over the last turn must not lift the root above the previous turn's crest
+            // (root rise Amp + taper·Lead <= crest - root), so the blank is at most crest + taper·(End - Lead).
+            double built = radius;
+            if (double.IsFinite(crest) && len >= faceLength - 1e-7)
+            {
+                double q1 = spec.ExtZr.OrderBy(v => v.Y).ThenBy(v => v.X).Skip(1).First().X;
+                built = Math.Min(radius, crest + taper * (len - q1 - lead) - 1e-6);
+            }
+            return ThreadRunoutOp.Build(frame, lead, faceLength, len, built, spec.ExtZr, left, taper: taper, crest: crest);
         }
         if (spec.Starts == 1 && Math.Abs(lead - spec.P) < 1e-9
             && spec.ExtZr.Length == 4 && spec.ExtZr.Select(p => p.Y).Distinct().Count() == 2)
