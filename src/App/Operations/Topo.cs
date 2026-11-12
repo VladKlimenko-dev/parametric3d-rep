@@ -38,7 +38,22 @@ public static class Topo
     }
 
     /// <summary>u12: кромка (граница касательных граней) — не ребро: скругление, фаска, массив по ней недоступны.</summary>
-    public static bool IsSeam(PickRef r) => r.Kind == PickKind.Edge && r.Owner is Part p && p.FindEdge(r.Id) is { } e && Parametric3D.Kernel.Topology.EdgeClass.IsTangentSeam(e);
+    public static bool IsSeam(PickRef r) => r.Kind == PickKind.Edge && r.Owner is Part p && p.FindEdge(r.Id) is { } e && IsSeamCached(e);
+
+    /// <summary>Longest edge selection that still gets the round/chamfer drag handle.</summary>
+    public const int HandleChainMax = 64;
+
+    // Command availability asks IsSeam for every selected edge on every refresh; the test projects
+    // points onto both faces (slow on procedural thread faces). Cached per edge geometry and faces.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TEdge, Tuple<object?, object?, object?, bool>> _seam = new();
+    private static bool IsSeamCached(TEdge e)
+    {
+        if (_seam.TryGetValue(e, out var c) && ReferenceEquals(c.Item1, e.Curve) && ReferenceEquals(c.Item2, e.FaceA) && ReferenceEquals(c.Item3, e.FaceB))
+            return c.Item4;
+        bool v = Parametric3D.Kernel.Topology.EdgeClass.IsTangentSeam(e);
+        _seam.AddOrUpdate(e, Tuple.Create<object?, object?, object?, bool>(e.Curve, e.FaceA, e.FaceB, v));
+        return v;
+    }
 
     /// <summary>
     /// u12 (замечание 13): плоскость цепочки рёбер (кромок) — если все выбранные рёбра лежат в одной плоскости и не на одной

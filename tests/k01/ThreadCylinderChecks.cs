@@ -166,11 +166,37 @@ static partial class Program
                 var chain = EdgeChain(mid);
                 double chainMs = cw.Elapsed.TotalMilliseconds;
                 double zLo = chain.Min(e => Math.Min(e.V0!.P.Z, e.V1!.P.Z)), zHi = chain.Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
+                // Saving the document must not tabulate the thread (it rebuilds on open).
+                var saveWatch = Stopwatch.StartNew();
+                bool skipped = false; try { BrepFile.Write(new[] { body }); } catch (NotSupportedException) { skipped = true; }
+                Require(skipped && saveWatch.Elapsed.TotalMilliseconds < 500, $"thread body cache: skipped={skipped}, {saveWatch.Elapsed.TotalMilliseconds:0} ms");
+                if (Environment.GetEnvironmentVariable("P3D_PICKPROBE") == "1")
+                {
+                    var sw = Stopwatch.StartNew(); int seams = chain.Count(e => EdgeClass.IsTangentSeam(e));
+                    double seamMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
+                    double lenSum = chain.Sum(e => e.Curve.Length); double lenMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
+                    int bytes = -1; try { bytes = BrepFile.Write(new[] { body }).Length; } catch (Exception ex) { Console.WriteLine("brep: " + ex.Message); }
+                    Log(new { probe = tid, chain = chain.Count, seams, seamMs, lenMs, brepBytes = bytes, brepMs = sw.Elapsed.TotalMilliseconds });
+                }
                 Require(chainMs < 200, $"edge chain took {chainMs:0} ms");
                 Require(zHi - zLo > length - 3, $"edge chain covers z {zLo:0.###}..{zHi:0.###}, thread length {length}");
                 Log(new { test = "THREAD-CYLINDER-NPT-METRICS", exit, length, ms, volume, expected, faces = body.Faces.Count(), chain = chain.Count, chainMs, zLo, zHi });
             });
         }
+        // User document (P3D_USERDOC=path): rebuild, save with display cache, reopen — no huge thread tables.
+        if (Environment.GetEnvironmentVariable("P3D_USERDOC") is { Length: > 0 } doc && File.Exists(doc))
+            Check("THREAD-USERDOC-SAVE", () =>
+            {
+                var (part, pars) = DocumentFile.Load(File.ReadAllText(doc));
+                var w = Stopwatch.StartNew(); part.Rebuild(pars); double rebuildMs = w.Elapsed.TotalMilliseconds;
+                Require(part.Features.All(f => f.Error == null), "rebuild: " + string.Join("; ", part.Features.Where(f => f.Error != null).Select(f => f.Error)));
+                w.Restart(); var text = DocumentFile.Save(part, pars, withDisplay: true); double saveMs = w.Elapsed.TotalMilliseconds;
+                string? note = DocumentFile.LastSaveNote;
+                Require(text.Length < 4 << 20, $"saved document is {text.Length} chars");
+                w.Restart(); var (again, ap) = DocumentFile.Load(text); again.Rebuild(ap); double reopenMs = w.Elapsed.TotalMilliseconds;
+                Require(again.Bodies.Count == part.Bodies.Count && again.Features.All(f => f.Error == null), "reopen");
+                Log(new { test = "THREAD-USERDOC-METRICS", rebuildMs, saveMs, chars = text.Length, note, reopenMs, mesh = part.Mesh != null });
+            });
         // Keep the general periodic sweep covered now that standard trapezoids use ruled strips.
         foreach (bool left in new[] { false, true })
             Check("THREAD-PERIODIC-GENERAL-" + left, () =>

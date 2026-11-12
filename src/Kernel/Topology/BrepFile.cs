@@ -35,6 +35,19 @@ public static class BrepFile
 
     // ================================================================ запись
 
+    static readonly bool ThreadTablesEnv = Environment.GetEnvironmentVariable("P3D_BREPTHREAD") == "1";
+    [ThreadStatic] static bool _threadTables;
+    static bool ThreadTablesOn => ThreadTablesEnv || _threadTables;
+
+    /// <summary>Write including tabulated thread rails (format round-trip checks; documents skip them).</summary>
+    public static byte[] WriteWithThreadTables(IReadOnlyList<TSolid> bodies)
+    {
+        bool was = _threadTables; _threadTables = true;
+        try { return Write(bodies); } finally { _threadTables = was; }
+    }
+    /// <summary>Largest stored body cache (compressed bytes).</summary>
+    public const long MaxBytes = 64L << 20;
+
     public static byte[] Write(IReadOnlyList<TSolid> bodies)
     {
         var w = new Writer();
@@ -48,6 +61,8 @@ public static class BrepFile
                 bw.Write(Magic); bw.Write(IndexedOff ? 2 : FormatVersion);
                 w.Emit(bw, bodies);
             }
+            // Any body cache this large is cheaper to rebuild than to store (and base64 in JSON has a hard limit).
+            if (ms.Length > MaxBytes) throw new NotSupportedException($"body cache too large ({ms.Length / 1048576} MB), rebuilt on open");
             Interlocked.Add(ref Written, bodies.Count);
             return ms.ToArray();
         }
@@ -71,6 +86,11 @@ public static class BrepFile
                 case IntersectionCurve3 ic: S(ic.A); S(ic.B); break;
                 case SectionIsoCurve sc: S(sc.Surface); break;
                 case ProcCurve3 pc when pc.ExactConic is { } ec: C3(ec); break;
+                // Exact thread rails tabulate to 1e-9 mm: up to 65537 points each, hundreds per thread —
+                // a 50 mm NPT thread wrote ~540 MB (JSON string limit, minutes of sampling). The thread is
+                // parametric and rebuilds in seconds, so its bodies are not cached in the file.
+                case ProcCurve3 pc when pc.Kind == "thread boundary" && !ThreadTablesOn:
+                    throw new NotSupportedException("thread geometry is rebuilt on open");
             }
             _c3[c] = i = _c3l.Count; _c3l.Add(c);
             return i;

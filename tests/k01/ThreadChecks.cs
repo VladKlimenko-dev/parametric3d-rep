@@ -147,7 +147,7 @@ static partial class Program
                 Require(Math.Abs(volume - expected) < expected * 1e-6, "volume against independent section integral");
                 if (length == 0.4)
                 {
-                    var data = BrepFile.Write(new[] { result });
+                    var data = BrepFile.WriteWithThreadTables(new[] { result });
                     var restored = BrepFile.ReadAll(data).Single().Body;
                     var restoredReport = SolidValidator.Validate(restored);
                     Require(restoredReport.IsValid, "saved B-rep: " + restoredReport.Summary());

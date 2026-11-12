@@ -1462,6 +1462,9 @@ public partial class MainWindow : Window
         static Vector3 F(OpenTK.Mathematics.Vector3d v) => new((float)v.X, (float)v.Y, (float)v.Z);
         switch (k)
         {
+            // A long chain (a thread edge: hundreds of helical pieces) gets no round/chamfer drag handle:
+            // its ghost projects every piece onto procedural faces — a long freeze on every pick.
+            case PickKind.Edge when sel.Count > Topo.HandleChainMax: ShowHint(null); return;
             case PickKind.Edge when Topo.EdgeHandle(part, sel[0].Id) is { } h:
                 View.Handle = new OpHandle(F(h.At), F(h.Out), true, true);
                 _handleKind = "edge";

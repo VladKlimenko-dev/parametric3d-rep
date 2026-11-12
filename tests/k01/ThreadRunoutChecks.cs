@@ -150,7 +150,7 @@ static partial class Program
                 }
                 if (length == 2)
                 {
-                    var data = BrepFile.Write(new[] { result });
+                    var data = BrepFile.WriteWithThreadTables(new[] { result });
                     var saved = BrepFile.ReadAll(data).Single().Body;
                     var valid = SolidValidator.Validate(saved);
                     Require(valid.IsValid, "run-out roundtrip: " + valid.Summary()
