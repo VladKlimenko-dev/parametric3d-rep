@@ -131,17 +131,33 @@ public static partial class DirectRound
             if (c == 1 && plain)
             {
                 var top = law.Frame.Origin + law.Frame.W * zTop;
-                var circle = ArcCurve3.FullCircle(new Frame3(top, law.Frame.U, law.Frame.V), law.Radius);
+                // Turned-down thread on an oversized blank: the plain part keeps the blank radius,
+                // joined to the turned diameter by a flat shoulder at z = plainFrom.
+                bool shoulder = law.Blank > law.Radius + 1e-9;
+                double rw = shoulder ? law.Blank : law.Radius;
+                var circle = ArcCurve3.FullCircle(new Frame3(top, law.Frame.U, law.Frame.V), rw);
                 var p0 = circle.PointAt(circle.T0);
-                var wall = new FDesc { Surf = new ExtrudedSurface(ArcCurve3.FullCircle(new Frame3(law.Frame.Origin, law.Frame.U, law.Frame.V), law.Radius), law.Frame.W),
-                    Tag = "sweep:side[thread.blank]", Touched = true, IsCyl = true, AxO = law.Frame.Origin, AxW = law.Frame.W, AxR = law.Radius,
-                    Hint = law.Frame.Origin + law.Frame.W * ((zb + zTop) / 2) + law.Frame.U * law.Radius };
+                var wall = new FDesc { Surf = new ExtrudedSurface(ArcCurve3.FullCircle(new Frame3(law.Frame.Origin, law.Frame.U, law.Frame.V), rw), law.Frame.W),
+                    Tag = "sweep:side[thread.blank]", Touched = true, IsCyl = true, AxO = law.Frame.Origin, AxW = law.Frame.W, AxR = rw,
+                    Hint = law.Frame.Origin + law.Frame.W * ((zb + zTop) / 2) + law.Frame.U * rw };
                 var center = law.Frame.Origin + law.Frame.W * zb;
                 double Radial(Vector3d p) { var d = p - center; return (d - law.Frame.W * Vector3d.Dot(d, law.Frame.W)).Length; }
                 bool OnBlank(Seg g) => Math.Abs(Radial(g.A) - law.Radius) < 1e-8 && Math.Abs(Radial(g.B) - law.Radius) < 1e-8
                     && Math.Abs(Radial(g.Curve.PointAt((g.Curve.T0 + g.Curve.T1) / 2)) - law.Radius) < 1e-8;
                 int n = ordered.Count, from = Enumerable.Range(0, n).FirstOrDefault(i => !OnBlank(ordered[i]) && OnBlank(ordered[(i + n - 1) % n]), -1);
-                if (ordered.All(g => !OnBlank(g)))
+                if (shoulder && ordered.Any(g => !OnBlank(g))) { why = "groove not withdrawn at the shoulder"; return null; }
+                if (shoulder)
+                {
+                    var ring = ArcCurve3.FullCircle(new Frame3(center, law.Frame.U, law.Frame.V), rw);
+                    var r0 = ring.PointAt(ring.T0);
+                    wall.Loops.Add(new List<Seg> { new() { Curve = ring, A = r0, B = r0 } });
+                    var step = new FDesc { Surf = new PlaneSurface(Frame3.FromNormal(center, -normal)), Tag = "thread:shoulder", N = -normal,
+                        Hint = center + law.Frame.U * ((law.Radius + rw) / 2) };
+                    step.Loops.Add(ordered);
+                    step.Loops.Add(new List<Seg> { new() { Curve = ring, A = r0, B = r0 } });
+                    faces.Add(step);
+                }
+                else if (ordered.All(g => !OnBlank(g)))
                 {
                     // Turned-down blank: the whole thread section lies inside the blank, so the
                     // step is an annulus between the blank circle and the thread section.

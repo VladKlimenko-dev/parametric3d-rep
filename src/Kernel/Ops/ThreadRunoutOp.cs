@@ -11,9 +11,16 @@ namespace Parametric3D.Kernel.Ops;
 public static class ThreadRunoutOp
 {
     public static TSolid Build(Frame3 frame, double lead, double height, double length,
-        double radius, IReadOnlyList<Vector2d> profile, bool left, bool smoothExit = true, double taper = 0, double crest = double.PositiveInfinity)
+        double radius, IReadOnlyList<Vector2d> profile, bool left, bool smoothExit = true, double taper = 0, double crest = double.PositiveInfinity, double blank = double.NaN)
     {
         var law = new ThreadRunoutLaw(frame, lead, height, length, radius, profile, left, smoothExit, taper, crest);
+        if (double.IsFinite(blank) && blank > radius + 1e-9)
+        {
+            // A shoulder needs the groove fully withdrawn below the plain part.
+            if (!(length < height - 1e-9) || !smoothExit)
+                throw new RebuildException(OperationOutcome.InvalidInput, "Thread run-out: a shoulder needs a partial smooth exit.");
+            law.Blank = blank;
+        }
         bool partial = length < height - 1e-9;
         // Abrupt partial ending: copied cells stay strictly below the stop plane z = length.
         // A tapered groove is not translation-periodic: one directly built cell, no copies.
@@ -84,6 +91,8 @@ internal sealed class ThreadRunoutLaw
     internal readonly double Taper;
     /// <summary>Withdrawal amplitude: the depth still left at the exit end after the taper rise.</summary>
     internal readonly double Amp;
+    /// <summary>Radius of the plain blank past the run-out (a shoulder when larger than Radius).</summary>
+    internal double Blank = double.NaN;
     /// <summary>Crest-cone radius at z = 0 (tapered threads); +inf — the crest is the blank itself.</summary>
     internal readonly double Crest0;
 

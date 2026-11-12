@@ -49,12 +49,14 @@ public sealed partial class CosmeticThreadFeature
             // The withdrawal over the last turn must not lift the root above the previous turn's crest
             // (root rise Amp + taper·Lead <= crest - root), so the blank is at most crest + taper·(End - Lead).
             double built = radius;
-            if (double.IsFinite(crest) && len >= faceLength - 1e-7)
+            if (double.IsFinite(crest))
             {
                 double q1 = spec.ExtZr.OrderBy(v => v.Y).ThenBy(v => v.X).Skip(1).First().X;
                 built = Math.Min(radius, crest + taper * (len - q1 - lead) - 1e-6);
             }
-            return ThreadRunoutOp.Build(frame, lead, faceLength, len, built, spec.ExtZr, left, taper: taper, crest: crest);
+            // Partial thread: the plain part beyond the run-out keeps the blank diameter (a shoulder).
+            return ThreadRunoutOp.Build(frame, lead, faceLength, len, built, spec.ExtZr, left, taper: taper, crest: crest,
+                blank: len < faceLength - 1e-7 ? radius : double.NaN);
         }
         if (spec.Starts == 1 && Math.Abs(lead - spec.P) < 1e-9
             && spec.ExtZr.Length == 4 && spec.ExtZr.Select(p => p.Y).Distinct().Count() == 2)
