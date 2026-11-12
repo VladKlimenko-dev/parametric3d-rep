@@ -104,6 +104,29 @@ public sealed class Selection
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Select a group (an edge chain) with ONE change notification. Selecting a thread edge chain
+    /// one by one raised Changed per edge: command refresh, status and operation updates for every
+    /// prefix of the chain — quadratic, a long freeze on threads with hundreds of edge pieces.
+    /// add: true — add the missing ones; remove: true — drop those that are selected.
+    /// </summary>
+    public void SelectGroup(IReadOnlyList<PickRef> group, bool additive, bool remove = false)
+    {
+        bool changed = false;
+        if (!additive && !remove) { changed = _items.Count > 0; _items.Clear(); _ids.Clear(); }
+        HashSet<uint>? drop = remove ? new HashSet<uint>() : null;
+        foreach (var r in group)
+        {
+            if (r.IsEmpty) continue;
+            if (remove) { if (_ids.Remove(r.Id)) { drop!.Add(r.Id); changed = true; } }
+            else if (_ids.Add(r.Id)) { _items.Add(r); changed = true; }
+        }
+        if (drop is { Count: > 0 }) _items.RemoveAll(x => drop.Contains(x.Id));
+        if (!changed) return;
+        ChangedCount++;
+        Changed?.Invoke();
+    }
+
     public void Clear()
     {
         if (_items.Count == 0 && _hover.IsEmpty) return;

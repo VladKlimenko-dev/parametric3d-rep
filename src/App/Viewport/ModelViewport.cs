@@ -876,18 +876,9 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (PickMap != null) { r = PickMap(r); if (r.IsEmpty) return; }
         // п. 4: ребро — вместе с касательной цепочкой (Alt — одно ребро; u13: выключаемо кнопкой)
         var group = r.Kind == PickKind.Edge && AutoChain && !req.Mods.HasFlag(KeyModifiers.Alt) && ExpandEdge != null ? ExpandEdge(r) : new List<PickRef> { r };
-        if (toggle && Selection.Contains(r.Id))
-        {
-            foreach (var g in group) if (Selection.Contains(g.Id)) Selection.Select(g, additive: true);
-            return;
-        }
-        if (toggle || add)
-        {
-            foreach (var g in group) if (!Selection.Contains(g.Id)) Selection.Select(g, additive: true);
-            return;
-        }
-        Selection.Select(group[0], additive: false);
-        foreach (var g in group.Skip(1)) Selection.Select(g, additive: true);
+        // One notification for the whole chain (a thread edge is hundreds of pieces).
+        if (toggle && Selection.Contains(r.Id)) { Selection.SelectGroup(group, additive: true, remove: true); return; }
+        Selection.SelectGroup(group, additive: toggle || add);
     }
 
     /// <summary>k137: щелчок добавляет к выбору без Shift (поле «точки по порядку»).</summary>

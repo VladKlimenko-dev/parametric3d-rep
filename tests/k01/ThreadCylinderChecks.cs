@@ -158,7 +158,17 @@ static partial class Program
                 Require(Math.Abs(volume - expected) < expected * 2e-6 && Math.Abs(uncached - expected) < expected * 2e-6,
                     $"independent volume integral {volume} / {uncached} vs {expected}");
                 Require(BooleanOp.VolumeVsFacets(body) is not { Agree: false }, "display/boundary volume mismatch");
-                Log(new { test = "THREAD-CYLINDER-NPT-METRICS", exit, length, ms, volume, expected, faces = body.Faces.Count() });
+                // Picking a thread edge selects its tangent chain (same rule as App Topo.TangentChain):
+                // it must be quick and run along the whole thread.
+                var helical = body.Edges.Where(e => e.Curve is Parametric3D.Kernel.Curves.ProcCurve3 && e.V0 != null && e.V1 != null).ToList();
+                var mid = helical.OrderBy(e => Math.Abs(e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2).Z - (30 - length / 2))).First();
+                var cw = Stopwatch.StartNew();
+                var chain = EdgeChain(mid);
+                double chainMs = cw.Elapsed.TotalMilliseconds;
+                double zLo = chain.Min(e => Math.Min(e.V0!.P.Z, e.V1!.P.Z)), zHi = chain.Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
+                Require(chainMs < 200, $"edge chain took {chainMs:0} ms");
+                Require(zHi - zLo > length - 3, $"edge chain covers z {zLo:0.###}..{zHi:0.###}, thread length {length}");
+                Log(new { test = "THREAD-CYLINDER-NPT-METRICS", exit, length, ms, volume, expected, faces = body.Faces.Count(), chain = chain.Count, chainMs, zLo, zHi });
             });
         }
         // Keep the general periodic sweep covered now that standard trapezoids use ruled strips.
@@ -187,6 +197,29 @@ static partial class Program
         double area = Math.PI / spec.P * (radius * radius * (spec.P - x1 + x0) + root * root * (p[1].X - p[0].X)
             + (Math.Pow(radius, 3) - Math.Pow(root, 3)) / 3 * (1 / mr - 1 / ml));
         return area * length + Math.PI * radius * radius * (height - length);
+    }
+
+    /// <summary>Mirror of App Topo.TangentChain: edges continuing the start edge G1 through vertices.</summary>
+    static List<TEdge> EdgeChain(TEdge start)
+    {
+        static Vector3d? Dir(TEdge e, TVertex v)
+        {
+            var c = e.Curve; double t = (c.PointAt(c.T0) - v.P).LengthSquared <= (c.PointAt(c.T1) - v.P).LengthSquared ? c.T0 : c.T1;
+            var d = c.TangentAt(t); return d.LengthSquared > 1e-24 ? d.Normalized() : null;
+        }
+        var res = new List<TEdge> { start }; var seen = new HashSet<TEdge> { start }; var queue = new Queue<TEdge>(res);
+        while (queue.Count > 0)
+        {
+            var e = queue.Dequeue();
+            foreach (var v in new[] { e.V0, e.V1 })
+            {
+                if (v == null || Dir(e, v) is not { } d) continue;
+                foreach (var o in v.Edges)
+                    if (!seen.Contains(o) && o.V0 != null && o.V1 != null && Dir(o, v) is { } d2 && Math.Abs(Vector3d.Dot(d, d2)) >= 0.99985)
+                    { seen.Add(o); res.Add(o); queue.Enqueue(o); }
+            }
+        }
+        return res;
     }
 
     /// <summary>Volume oracle for a tool section raised by smooth exit plus taper·t, clipped at the blank.</summary>

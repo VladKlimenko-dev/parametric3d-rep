@@ -243,11 +243,12 @@ public static class ViewSelectCommands
     /// <summary>Касательная цепочка: выбранные рёбра дополняются касательно продолжающимися.</summary>
     public static int ExpandChains(MainWindow w)
     {
-        int n = 0;
+        var add = new List<PickRef>(); var seen = new HashSet<uint>();
         foreach (var r in w.ViewPort.Selection.Items.Where(x => x.Kind == PickKind.Edge && x.Owner is Part).ToList())
             foreach (var c in Topo.ChainRefs((Part)r.Owner!, r))
-                if (!w.ViewPort.Selection.Contains(c.Id)) { w.ViewPort.Selection.Select(c, additive: true); n++; }
-        return n;
+                if (!w.ViewPort.Selection.Contains(c.Id) && seen.Add(c.Id)) add.Add(c);
+        w.ViewPort.Selection.SelectGroup(add, additive: true);   // one notification for all chains
+        return add.Count;
     }
 
     /// <summary>Контур грани: рёбра внешнего контура выбранной грани (и внутренних — со второго нажатия).</summary>

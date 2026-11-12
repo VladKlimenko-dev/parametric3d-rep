@@ -58,8 +58,10 @@ public static class Topo
         if (!(scale > 1e-9)) return null;
         // нормаль: наибольшее векторное произведение пар направлений от центра
         Vector3d n = Vector3d.Zero; double best = 0;
-        for (int i = 0; i < pts.Count; i++)
-            for (int j = i + 1; j < pts.Count; j += 3)
+        // Bounded pair search: a long chain (thread: hundreds of edges) must not cost O(points²).
+        int stride = Math.Max(1, pts.Count / 96);
+        for (int i = 0; i < pts.Count; i += stride)
+            for (int j = i + 1; j < pts.Count; j += 3 * stride)
             {
                 var c = Vector3d.Cross(pts[i] - o, pts[j] - o);
                 if (c.Length > best) { best = c.Length; n = c; }
