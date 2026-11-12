@@ -188,7 +188,30 @@ static partial class Program
             Check("THREAD-USERDOC-SAVE", () =>
             {
                 var (part, pars) = DocumentFile.Load(File.ReadAllText(doc));
+                if (Environment.GetEnvironmentVariable("P3D_STAGEPROBE") == "2")
+                {
+                    // Same thread built directly: Ø23 x 100, 1/2-14 NPT, 50 mm from the top, smooth exit.
+                    var sk = new Sketch("c", Frame3.XY); var pp = new Part("probe"); pp.Add(sk);
+                    sk.AddEntity(new SkCircle(new SkPoint(0, 0), 11.5));
+                    var cx = new BuildContext { Part = pp, Parameters = new ParameterTable() };
+                    var ex = new ExtrudeFeature { SketchId = sk.Id }; ex.Side1.Distance = 100; ex.Execute(cx);
+                    var sp = Parametric3D.Model.Threads.ThreadDb.All.First(t => t.Designation == "1/2-14 NPT");
+                    var th = new CosmeticThreadFeature { TypeId = sp.Id, Cosmetic = false, SmoothExit = true }; th.Length = new(50);
+                    th.OnFaces.Add(FaceRefs.Inside(cx.Bodies.Single().Faces.Single(f => GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.ExtrudedSurface)));
+                    var sw = Stopwatch.StartNew(); th.Execute(cx); double execMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
+                    var vb = SolidValidator.Validate(cx.Bodies[0]); double validMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
+                    double vol = AnalyticVolume.Of(cx.Bodies[0]) ?? 0; double volMs = sw.Elapsed.TotalMilliseconds;
+                    Log(new { probe = "stages", execMs, validMs, volMs, valid = vb.IsValid, faces = cx.Bodies[0].Faces.Count(), edges = cx.Bodies[0].Edges.Count(), th.LastRoute });
+                }
+                bool prof = Environment.GetEnvironmentVariable("P3D_STAGEPROBE") == "1";
+                if (prof) { Parametric3D.Kernel.Diagnostics.Prof.Enabled = true; Parametric3D.Kernel.Diagnostics.Prof.ResetAll(); }
                 var w = Stopwatch.StartNew(); part.Rebuild(pars); double rebuildMs = w.Elapsed.TotalMilliseconds;
+                if (prof)
+                {
+                    Parametric3D.Kernel.Diagnostics.Prof.Enabled = false;
+                    Console.WriteLine("PROF " + Parametric3D.Kernel.Diagnostics.Prof.Report());
+                    foreach (var kv in part.LastFeatureMs) Console.WriteLine($"PROF feature {kv.Key.Name}: {kv.Value:0} ms");
+                }
                 Require(part.Features.All(f => f.Error == null), "rebuild: " + string.Join("; ", part.Features.Where(f => f.Error != null).Select(f => f.Error)));
                 w.Restart(); var text = DocumentFile.Save(part, pars, withDisplay: true); double saveMs = w.Elapsed.TotalMilliseconds;
                 string? note = DocumentFile.LastSaveNote;

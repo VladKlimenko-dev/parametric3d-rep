@@ -81,6 +81,7 @@ public static class AnalyticVolume
         // 17:31: как у проверок — без отложенной разметки и сетки показа в ключе (мутация P3D_VALKEYDISPLAY=0 — прежний ключ)
         KernelSettings? key = VolCacheOff ? null : KernelSettings.Capture() with { Preview = false, LivePreview = false };
         if (key != null && !SolidValidator.KeyDisplayOff) key = key with { DeferMeshing = false, BooleanThreads = 1, MeshThreads = 1 };
+        if (key != null) key = NormalizeVolKey(key);
         ulong fp = key == null ? 0 : TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff);
         if (key != null && _volCache.TryGetValue(solid, out var hit) && hit.Revision == solid.Revision && hit.Print == fp && hit.Key.Equals(key))
         {
@@ -102,6 +103,15 @@ public static class AnalyticVolume
         return v;
     }
 
+    /// <summary>
+    /// Thread rebuild speed: GeometryPolicy only steers Boolean routing (faceting allowed or not); the face integral of an
+    /// already built body does not read it. Builders run under PreserveBRep and the part under AllowBoundedFaceting, so the
+    /// policy in the key made the part recompute the whole integral (NPT 1/2-14, 50 mm: 1788 faces, 14 s).
+    /// Mutation P3D_VOLKEYPOLICY=0 keeps the policy in the key.
+    /// </summary>
+    static KernelSettings NormalizeVolKey(KernelSettings k) => VolKeyPolicyOff ? k : k with { GeometryPolicy = GeometryPolicy.AllowBoundedFaceting };
+    static readonly bool VolKeyPolicyOff = Environment.GetEnvironmentVariable("P3D_VOLKEYPOLICY") == "0";
+
     private sealed class VolEntry { public long Revision; public ulong Print; public KernelSettings Key = null!; public double? Volume; public double Quad; }
     /// <summary>Builder-only additive integral for certified, non-overlapping sewn cells.</summary>
     internal static void RememberComposition(TSolid solid, double volume, double error)
@@ -110,6 +120,7 @@ public static class AnalyticVolume
             throw new ArgumentException("Invalid composition measure.");
         var key = KernelSettings.Capture() with { Preview = false, LivePreview = false };
         if (!SolidValidator.KeyDisplayOff) key = key with { DeferMeshing = false, BooleanThreads = 1, MeshThreads = 1 };
+        key = NormalizeVolKey(key);
         _volCache.AddOrUpdate(solid, new VolEntry { Revision = solid.Revision,
             Print = TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff), Key = key,
             Volume = volume, Quad = error * 3 });
