@@ -737,14 +737,36 @@ public sealed class Part : ModelItem
         // 21.10 (скорость): ПЛОЩАДЬ ДЕТАЛИ — ПО ЗАПРОСУ. Её смотрят свойства и выражения, а считалась она на каждом перестроении
         // (у ленты скругления — квадратура в два прохода, 60–130 мс). Части площади — числа или отложенные расчёты тел; сумма —
         // при первом чтении, один раз. Мутация P3D_LAZYAREA=0 — сразу.
-        double _areaNow; List<Func<double>>? _areaLater; readonly object _areaLock = new();
+        // Opening a saved thread part (1788 faces): the deferred sum took 11 s INSIDE _areaLock, and the properties panel asks
+        // AreaPending (same lock) on the window thread — the window froze until the background sum ended. The sum now runs
+        // under its own lock (one evaluation); _areaLock is held only for field access, so AreaPending never waits.
+        // Mutation P3D_AREALOCK=0 — the sum inside _areaLock as before.
+        double _areaNow; List<Func<double>>? _areaLater; readonly object _areaLock = new(), _areaSumLock = new();
+        static readonly bool AreaLockOff = Environment.GetEnvironmentVariable("P3D_AREALOCK") == "0";
         public double Area
         {
-            get { lock (_areaLock) { if (_areaLater != null) { foreach (var f in _areaLater) _areaNow += f(); _areaLater = null; } return _areaNow; } }
+            get
+            {
+                if (AreaLockOff) lock (_areaLock) { if (_areaLater != null) { foreach (var f in _areaLater) _areaNow += f(); _areaLater = null; } return _areaNow; }
+                lock (_areaSumLock)
+                {
+                    List<Func<double>>? later; double now;
+                    lock (_areaLock) { later = _areaLater; now = _areaNow; }
+                    if (later == null) return now;
+                    double add = 0;
+                    foreach (var f in later) add += f();
+                    lock (_areaLock)
+                    {
+                        // replaced meanwhile (set / share) — that value wins
+                        if (!ReferenceEquals(_areaLater, later)) return _areaLater == null ? _areaNow : now + add;
+                        _areaNow += add; _areaLater = null; return _areaNow;
+                    }
+                }
+            }
             set { lock (_areaLock) { _areaNow = value; _areaLater = null; } }
         }
         public void AddArea(double a) { lock (_areaLock) _areaNow += a; }
-        public void AddAreaLater(Func<double> f) { lock (_areaLock) (_areaLater ??= new()).Add(f); }
+        public void AddAreaLater(Func<double> f) { lock (_areaLock) { var l = _areaLater == null ? new List<Func<double>>() : new List<Func<double>>(_areaLater); l.Add(f); _areaLater = l; } }
         public void ShareAreaFrom(BuildResult o) { lock (o._areaLock) lock (_areaLock) { _areaNow = o._areaNow; _areaLater = o._areaLater == null ? null : new List<Func<double>>(o._areaLater); } }
         public bool AreaPending { get { lock (_areaLock) return _areaLater != null; } }
         /// <summary>g.04: граница ошибки объёма (сумма по телам; ∞ — неизвестна).</summary>
@@ -1139,6 +1161,7 @@ public sealed class Part : ModelItem
     /// переведены на новые), ошибки и созданные грани операций, предупреждения, имена тел, объём и площадь — записанные при
     /// сохранении. Деталь не грязная: перестроение начнётся с первой правки (с начала дерева — сохранённых состояний нет).
     /// </summary>
+    static readonly bool AreaMeshOff = Environment.GetEnvironmentVariable("P3D_AREAMESH") == "0";
     public void RestoreFromFile(IReadOnlyList<Kernel.Topology.BrepFile.Restored> bodies, MeshData md, double volume, double? area,
                                 IReadOnlyList<string> bodyNames, IReadOnlyList<string> warnings,
                                 IReadOnlyDictionary<string, string> errors, IReadOnlyDictionary<string, List<uint>> created, ParameterTable? parameters,
@@ -1179,6 +1202,9 @@ public sealed class Part : ModelItem
         // k156: площадь не записана (при сохранении не была посчитана) — по запросу, как после перестроения
         _areaFrom = new BuildResult();
         if (area is { } ar) _areaFrom.Area = ar;
+        // Fallback for one body — the restored display mesh (as after a rebuild, line ~2028); re-tessellating the 1786-face
+        // thread body took seconds more. Several bodies share one mesh — each is tessellated. Mutation P3D_AREAMESH=0.
+        else if (Bodies.Count == 1 && !AreaMeshOff) { var bb = Bodies[0]; var mm = mesh; _areaFrom.AddAreaLater(() => Kernel.Topology.AnalyticVolume.AreaOf(bb) ?? MassProps.Area(mm)); }
         else foreach (var b in Bodies) { var bb = b; _areaFrom.AddAreaLater(() => Kernel.Topology.AnalyticVolume.AreaOf(bb) ?? MassProps.Area(Kernel.Tess.Tessellator.Tessellate(bb))); }
         int failed = Features.Count(f => f.Error != null);
         Error = failed > 0 ? $"Failed features in the build tree: {failed}." : null;

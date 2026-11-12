@@ -229,7 +229,24 @@ public static class AnalyticVolume
         if (solid.TopologyConvention < TopologyConventions.Version) return null;
         if (PolyhedralAuthoritative(solid) && Of(solid) == null) return null;   // интеграл не согласен с многогранной формой
         double sum = 0;
-        foreach (var f in solid.Faces)
+        // Faces in parallel (like the volume, P3D_VOLPAR): each face area depends on that face only; the sum keeps face
+        // order (same bits). 1777 thread patches of a restored NPT part: 4.4 s on one thread. Mutation P3D_AREAPAR=0.
+        var faceList = solid.Faces.ToList();
+        int threads = Tess.Tessellator.Threads;
+        if (!AreaParOff && threads > 1 && Environment.ProcessorCount > 1 && faceList.Count >= 4 && _coarse == 0 && !_rough && !AreaCacheOff)
+        {
+            var parts = new double?[faceList.Count]; bool bad = false;
+            System.Threading.Tasks.Parallel.For(0, faceList.Count, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = threads }, (i, st) =>
+            {
+                var a = FaceArea(faceList[i]);
+                if (a == null || double.IsNaN(a.Value)) { bad = true; st.Stop(); return; }
+                parts[i] = a;
+            });
+            if (bad) return null;
+            foreach (var a in parts) sum += Math.Abs(a!.Value);
+            return sum;
+        }
+        foreach (var f in faceList)
         {
             var a = FaceArea(f);
             if (a == null || double.IsNaN(a.Value)) return null;
@@ -237,6 +254,7 @@ public static class AnalyticVolume
         }
         return sum;
     }
+    static readonly bool AreaParOff = Environment.GetEnvironmentVariable("P3D_AREAPAR") == "0";
 
     /// <summary>Мутация g.02 (P3D_FLATREV=0): плоская крышка тела вращения — общей формулой вращения, как прежде.</summary>
     static readonly bool FlatRevOff = Environment.GetEnvironmentVariable("P3D_FLATREV") == "0";
@@ -889,7 +907,7 @@ public static class AnalyticVolume
         {
             // A swept section is an isoparametric cut, including a Bezier section.
             // Do not run an inverse curve/surface solve at every quadrature node.
-            if (f.Tag?.StartsWith("sweep:side[") == true && c is LineCurve3 or ArcCurve3 or BezierCurve3)
+            if (IsSweepSide(f) && c is LineCurve3 or ArcCurve3 or BezierCurve3)
             {
                 var start = ss.ProjectToUV(c.PointAt(c.T0));
                 var end = ss.ProjectToUV(c.PointAt(c.T1));
@@ -949,6 +967,21 @@ public static class AnalyticVolume
     // 12 × 4: сошлись (разность ≤ 1e-11 величины) — он и есть результат, а грубым проходом квадратуры объёма служит 12 × 4
     // (оценка ошибки — та же разность); нет — прежние 48 × 16 и 24 × 8. Мутация P3D_BANDADAPT=0.
     static readonly bool BandAdaptOff = Environment.GetEnvironmentVariable("P3D_BANDADAPT") == "0";
+    /// <summary>
+    /// Side of a sweep — also inside a part, where the face tag carries the feature prefix ("#9703c2f805/sweep:side[...]").
+    /// The bare StartsWith missed every part face: the 1777 thread patches of a saved NPT part took the dense 24×8 + 12×4
+    /// grids (37 thousand points, 23 ms each; 11 s for the part area on open). Mutation P3D_SWEEPTAGPREFIX=0 — bare match.
+    /// </summary>
+    static bool IsSweepSide(TFace f)
+    {
+        var t = f.Tag;
+        if (t == null) return false;
+        if (t.StartsWith("sweep:side[", StringComparison.Ordinal)) return true;
+        if (SweepTagPrefixOff || t.Length == 0 || t[0] != '#') return false;
+        int k = t.IndexOf('/');
+        return k > 0 && string.CompareOrdinal(t, k + 1, "sweep:side[", 0, 11) == 0;
+    }
+    static readonly bool SweepTagPrefixOff = Environment.GetEnvironmentVariable("P3D_SWEEPTAGPREFIX") == "0";
     [ThreadStatic] static (TFace F, bool Area, double Coarse)? _bandCoarse;
 
     static double? BandOpenIntegral(TFace f, SectionSurface ss, (Func<double, double> L, Func<double, double> R) rg, bool area)
@@ -963,7 +996,7 @@ public static class AnalyticVolume
         // Smooth, whole sweep patches need far fewer nodes than a general trimmed blend.
         // Still compare genuinely different u AND v quadratures; on disagreement use
         // the established dense path below. No acceptance/volume check is disabled.
-        if (f.Tag?.StartsWith("sweep:side[") == true && f.Loops.Count == 1
+        if (IsSweepSide(f) && f.Loops.Count == 1
             && (f.Loops[0].CoEdges.Count == 4 || WholeThreadPatch(f, ss)) && ss.Breaks.Count == 0)
         {
             var fineSweep = BandOpenIntegralAt(f, ss, rg, area, 8, 2);

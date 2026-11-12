@@ -1385,10 +1385,22 @@ public partial class MainWindow : Window
     private PickRef _lastPrimary;
     private List<(uint, PickKind)> _lastSelIds = new();
 
+    private int _lastSelCount = -1;
+    /// <summary>Hover-only selection notifications that skipped the selection refresh.</summary>
+    public int HoverOnlyRefreshSkipped { get; private set; }
+    public static readonly bool HoverSelOff = Environment.GetEnvironmentVariable("P3D_HOVERSEL") == "0";
+
     private void OnSelectionChanged()
     {
         using var _ui = Diagnostics.UiTimes.Measure("окно: выбор изменился");
         // u12: наведение тоже извещает об изменении выбора — операции передаётся только изменившийся выбор
+        // Hover alone (Selection.SetHover raises Changed without ChangedCount): the cursor moving across faces during orbit
+        // changes it every frame. Rebuilding the context bar, command states, handle and properties panel for a selected
+        // thread face chain (441 faces) on each hover dropped the view to a few FPS. Hover has its own path (HoverChanged:
+        // status line, tree hot mark; viewport flags). P3D_HOVERSEL=0 — full refresh on hover as before.
+        int cc = View.Selection.ChangedCount;
+        if (!HoverSelOff && cc == _lastSelCount && _lastSelCount >= 0) { HoverOnlyRefreshSkipped++; return; }
+        _lastSelCount = cc;
         var ids = View.Selection.Items.Select(r => (r.Id, r.Kind)).ToList();
         bool selChanged = !ids.SequenceEqual(_lastSelIds);
         // k115 (п. 5): очертание скрытого элемента — пока он выбран
