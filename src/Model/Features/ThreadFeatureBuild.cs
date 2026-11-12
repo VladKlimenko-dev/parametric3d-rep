@@ -25,6 +25,11 @@ public sealed partial class CosmeticThreadFeature
     /// <summary>k187: the thread rebuild accepts this face (axis and radius).</summary>
     public static bool IsThreadFace(Kernel.Topology.TFace f) => ThreadAxis(f) != null && DirectEdit.RadiusAfter(f, 0) != null && DirectEdit.RadiusAfter(f, 1) != null;
 
+    /// <summary>k188: a smooth run-out off the direct route goes through the general exact boolean (the same law sweep tool, whose root
+    /// leaves the blank at a crossing angle: clearance P3D_RUNOUTCLEAR·P, default 0.06, instead of a degenerate tangency);
+    /// P3D_THREADGENRUNOUT=0 — refused, as before.</summary>
+    static readonly double GeneralRunoutClear = double.TryParse(Environment.GetEnvironmentVariable("P3D_RUNOUTCLEAR"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var c) ? c : 0.06;
+    static readonly bool GeneralRunoutOff = Environment.GetEnvironmentVariable("P3D_THREADGENRUNOUT") == "0";
     public override void Execute(BuildContext ctx)
     {
         Lines = null;
@@ -106,10 +111,10 @@ public sealed partial class CosmeticThreadFeature
             LastRoute = SmoothExit ? "direct-runout" : "direct-screw";
             return;
         }
-        if (SmoothExit)
+        if (SmoothExit && GeneralRunoutOff)
             throw new RebuildException(OperationOutcome.Unsupported,
                 "Thread: exact smooth run-out requires a single-start external trapezoid on an isolated cylinder. The original body is unchanged.");
-        foreach (var tool in CutTools(spec, Internal, b0, u, e1, len, LeftHand, SmoothExit, r0))
+        foreach (var tool in CutTools(spec, Internal, b0, u, e1, len, LeftHand, SmoothExit, r0, SmoothExit ? GeneralRunoutClear * spec.P : 0))
         {
             KernelContext.Checkpoint("thread.cut");
             BooleanOp.Subtract(resultBodies, tool, ctx.Warnings);

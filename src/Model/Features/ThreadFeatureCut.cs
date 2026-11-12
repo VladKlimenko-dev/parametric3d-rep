@@ -50,7 +50,7 @@ public sealed partial class CosmeticThreadFeature
     /// <summary>Analytic frame law with C1 radial entry, optional exit; z=0 is the requested start.</summary>
     public static (Vector3d O, Vector3d U, Vector3d V) ToolFrame(ThreadSpec spec, bool inner,
         Vector3d b0, Vector3d u, Vector3d radial, double z, double len, bool left, bool smoothExit,
-        double? blankRadius = null)
+        double? blankRadius = null, double exitClear = 0)
     {
         var zr = inner ? spec.IntZr : spec.ExtZr;
         double lead = spec.Lead > Tol.Weld ? spec.Lead : spec.P * Math.Max(1, spec.Starts);
@@ -73,7 +73,7 @@ public sealed partial class CosmeticThreadFeature
             {
                 double t = Math.Clamp((z - end + exitLen) / exitLen, 0, 1);
                 // Exactly to the blank: extra clearance here would cross it with nonzero velocity.
-                dr += outSign * Math.Abs(root - rFace) * t * t * (3 - 2 * t);
+                dr += outSign * (Math.Abs(root - rFace) + exitClear) * t * t * (3 - 2 * t);
             }
         }
         return (b0 + u * z + v * dr, u, v);
@@ -122,7 +122,7 @@ public sealed partial class CosmeticThreadFeature
     static readonly bool LawBreaksOff = Environment.GetEnvironmentVariable("P3D_THREADLAWBREAKS") == "0";
 
     public static List<TSolid> CutTools(ThreadSpec spec, bool inner, Vector3d b0, Vector3d u,
-        Vector3d e1, double len, bool left, bool smoothExit, double? blankRadius = null)
+        Vector3d e1, double len, bool left, bool smoothExit, double? blankRadius = null, double exitClear = 0)
     {
         if (!(len > 0) || !double.IsFinite(len) || !(spec.P > 0))
             throw new RebuildException(OperationOutcome.InvalidInput, "Thread: invalid length or pitch.");
@@ -138,7 +138,7 @@ public sealed partial class CosmeticThreadFeature
             KernelContext.Checkpoint("thread.tool");
             var radial = Rot(e1, u, 2 * Math.PI * k / starts);
             (Vector3d O, Vector3d U, Vector3d V) Law(double s) =>
-                ToolFrame(spec, inner, b0, u, radial, -entry + travel * s, len, left, smoothExit, blankRadius);
+                ToolFrame(spec, inner, b0, u, radial, -entry + travel * s, len, left, smoothExit, blankRadius, exitClear);
             var first = Law(0);
             var plane = new Frame3(first.O, first.U, first.V);
             var curves = Enumerable.Range(0, zr.Length).Select(i => (ICurve3)new LineCurve3(
