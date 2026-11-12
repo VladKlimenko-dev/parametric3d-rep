@@ -273,11 +273,25 @@ public static class FaceIntersect
         if (Environment.GetEnvironmentVariable("P3D_EVDUMP") == "1") Console.Error.WriteLine($"EVDUMP {c.GetType().Name} {c.PointAt(c.T0):0.######}->{c.PointAt(c.T1):0.######} on {(other.Param ? "NURBS" : other.Shape?.GetType().Name)}: [{string.Join(", ", lst.Select(t => t.ToString("R")))}] unres {res.Unresolved != null}");
         return lst;
     }
+    static readonly bool EvArcBoxOff = Environment.GetEnvironmentVariable("P3D_EVARCBOX") == "0";
+    static readonly bool EvSmpAll = Environment.GetEnvironmentVariable("P3D_EVSMPALL") == "1";
+    /// <summary>Габарит окружности дуги (центр ± R·√(1 − w_i²), с запасом) пересекает габарит [lo, hi].</summary>
+    static bool ArcMeetsBox(ArcCurve3 arc, Vector3d lo, Vector3d hi)
+    {
+        var w = arc.Frame.W.Normalized(); var c = arc.Frame.Origin; double r = arc.Radius, m = 1e-9 * Math.Max(1, r + c.Length);
+        var ext = new Vector3d(r * Math.Sqrt(Math.Max(0, 1 - w.X * w.X)) + m, r * Math.Sqrt(Math.Max(0, 1 - w.Y * w.Y)) + m, r * Math.Sqrt(Math.Max(0, 1 - w.Z * w.Z)) + m);
+        var a = c - ext; var b = c + ext;
+        return !(a.X > hi.X || a.Y > hi.Y || a.Z > hi.Z || b.X < lo.X || b.Y < lo.Y || b.Z < lo.Z);
+    }
     static List<double> EventsOn0(ICurve3 c, AnalyticFace other, Result res)
     {
         if (other.Param && !RigorousEvents.Off)
         {
             // 04.2: с поверхностью NURBS — строго (Кравчик по кускам Безье); не доказано — отказ маршрута
+            // k186: ДУГА ВНЕ ГАБАРИТА ОПОРНЫХ ТОЧЕК NURBS — событий нет (поверхность в выпуклой оболочке опорных точек, дуга — в
+            // габарите своей окружности); тот же пустой ответ, что у строгого счёта, без него. Резьба на шейке DLOT: кромки
+            // фасок и цилиндра против 150 кусков резца — 1430 вызовов. Мутация P3D_EVARCBOX=0.
+            if (!EvArcBoxOff && c is ArcCurve3 arc && !ArcMeetsBox(arc, other.ParamLo, other.ParamHi)) return new List<double>();
             var rg = RigorousEvents.OnNurbs(c, other.ParamS!, other.PUa, other.PUb, other.PVa, other.PVb);
             if (RigorDbg)
             {
@@ -289,7 +303,9 @@ public static class FaceIntersect
             {
                 // тот же корень, что даёт выборка (если она его нашла), — её значение до бита: последующие построения сравнивают
                 // точки побитово; корни, которых выборка не нашла, — строгие
-                var smp = ParamEvents(c, other);
+                // k186: выборка (1024 проекции) — только чтобы взять её значения корней до бита; нет строгих корней — не нужна
+                // (88 из 130 с счёта событий у резьбы DLOT). Мутация P3D_EVSMPALL=1 — всегда, как прежде.
+                var smp = rg.Count > 0 || EvSmpAll ? ParamEvents(c, other) : new List<double>();
                 for (int i = 0; i < rg.Count; i++)
                 {
                     var p = c.PointAt(rg[i]);

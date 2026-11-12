@@ -189,6 +189,44 @@ public sealed partial class AnalyticFace
             if (t0 > t1) return res;
         }
         var S = ParamS!; const double h = 1e-7;
+        // k186: ПОЛНЫЙ ПОИСК ЗАТРАВОК — куски Безье грани, деление пополам с исключением по выпуклой оболочке относительно двух
+        // плоскостей луча; Ньютон — из центра каждого уцелевшего малого куска. Прежние затравки (треугольники сетки с запасом
+        // в четверть) теряли пересечения: резец резьбы DLOT — луч у угла соседних витков (зазор 0.002 P) прошёл боковую грань
+        // вдали от её края, затравки не нашлось, чётность 3 вместо 4, проверка CSG отвергла верный точный результат.
+        // Малый кусок, который оболочка не исключает, а Ньютон не сошёлся, — касание в пределах куска: сомнение (другой луч).
+        // Мутация P3D_RAYBEZ=0 — прежние треугольники.
+        if (!RayBezOff && (ParamBez ??= BuildParamBez()) is { Count: > 0 } pieces)
+        {
+            var n1 = Vector3d.Cross(dir, Math.Abs(dir.X) < 0.6 ? Vector3d.UnitX : Vector3d.UnitY).Normalized();
+            var n2 = Vector3d.Cross(dir, n1).Normalized();
+            double c1 = Vector3d.Dot(n1, p), c2 = Vector3d.Dot(n2, p);
+            double leaf = Math.Max(1e-3, 1e-4 * (ParamHi - ParamLo).Length), eps = 1e-12 * Math.Max(1, (ParamHi - ParamLo).Length);
+            bool doubt = false;
+            var stack = new Stack<(Surfaces.BezierPatch P, int D)>();
+            foreach (var bp in pieces) stack.Push((bp, 0));
+            while (stack.Count > 0)
+            {
+                var (bp, depth) = stack.Pop();
+                bool pos1 = true, neg1 = true, pos2 = true, neg2 = true;
+                foreach (var q4 in bp.Pw)
+                {
+                    double f1 = n1.X * q4.X + n1.Y * q4.Y + n1.Z * q4.Z - c1 * q4.W, f2 = n2.X * q4.X + n2.Y * q4.Y + n2.Z * q4.Z - c2 * q4.W;
+                    double e4 = eps * q4.W;
+                    if (f1 <= e4) pos1 = false; if (f1 >= -e4) neg1 = false; if (f2 <= e4) pos2 = false; if (f2 >= -e4) neg2 = false;
+                }
+                if (pos1 || neg1 || pos2 || neg2) continue;                    // оболочка куска по одну сторону плоскости луча
+                var (blo, bhi) = bp.Box();
+                if ((bhi - blo).Length > leaf && depth < 60) { var (A, B) = bp.Split(SplitAlongU(bp)); stack.Push((A, depth + 1)); stack.Push((B, depth + 1)); continue; }
+                double u = (bp.U0 + bp.U1) / 2, v = (bp.V0 + bp.V1) / 2;
+                double tt = Vector3d.Dot(S.PointAt(new Vector2d(u, v)) - p, dir);
+                if (!RayNewton(S, p, dir, ref tt, ref u, ref v, h, out double gap)) { if (gap < leaf) doubt = true; continue; }
+                if (res.Any(x => Math.Abs(x.T - tt) < 1e-8)) continue;
+                var qh = p + dir * tt; var nh = S.NormalAt(new Vector2d(u, v));
+                res.Add((tt, qh, Math.Abs(Vector3d.Dot(nh, dir)) < 1e-4));
+            }
+            if (doubt) res.Add((double.MaxValue, p, true));                    // сомнение: классификатор возьмёт другой луч
+            return res;
+        }
         foreach (var (a, b, c) in ParamTris!)
         {
             var e1 = b - a; var e2 = c - a; var pv = Vector3d.Cross(dir, e2); double det = Vector3d.Dot(e1, pv);
@@ -215,5 +253,47 @@ public sealed partial class AnalyticFace
             res.Add((tt, q, Math.Abs(Vector3d.Dot(n, dir)) < 1e-4));
         }
         return res;
+    }
+
+    internal List<Surfaces.BezierPatch>? ParamBez;
+    static readonly bool RayBezOff = Environment.GetEnvironmentVariable("P3D_RAYBEZ") == "0";
+    /// <summary>k186: куски Безье поверхности, обрезанные прямоугольником параметров грани (с запасом в 1e-9).</summary>
+    List<Surfaces.BezierPatch> BuildParamBez()
+    {
+        var list = new List<Surfaces.BezierPatch>();
+        double ua = PUa - 1e-9, ub = PUb + 1e-9, va = PVa - 1e-9, vb = PVb + 1e-9;
+        foreach (var bp in Surfaces.NurbsTools.Beziers(ParamS!))
+        {
+            double u0 = Math.Max(bp.U0, ua), u1 = Math.Min(bp.U1, ub), v0 = Math.Max(bp.V0, va), v1 = Math.Min(bp.V1, vb);
+            if (u0 >= u1 || v0 >= v1) continue;
+            list.Add(u0 == bp.U0 && u1 == bp.U1 && v0 == bp.V0 && v1 == bp.V1 ? bp : bp.Sub(u0, u1, v0, v1));
+        }
+        return list;
+    }
+    /// <summary>Делить по длинной стороне куска в пространстве.</summary>
+    static bool SplitAlongU(Surfaces.BezierPatch bp)
+    {
+        int nu = bp.Pw.GetLength(0) - 1, nv = bp.Pw.GetLength(1) - 1;
+        Vector3d P(int i, int j) { var q = bp.Pw[i, j]; return new Vector3d(q.X / q.W, q.Y / q.W, q.Z / q.W); }
+        double lu = (P(nu, 0) - P(0, 0)).Length + (P(nu, nv) - P(0, nv)).Length, lv = (P(0, nv) - P(0, 0)).Length + (P(nu, nv) - P(nu, 0)).Length;
+        return lu >= lv;
+    }
+    /// <summary>Ньютон по (t, u, v) для p + t·dir = S(u, v); gap — остаток при отказе.</summary>
+    static bool RayNewton(Surfaces.NurbsSurface S, Vector3d p, Vector3d dir, ref double tt, ref double u, ref double v, double h, out double gap)
+    {
+        gap = double.MaxValue;
+        for (int it = 0; it < 40; it++)
+        {
+            var X = S.PointAt(new Vector2d(u, v)); var G = p + dir * tt - X; gap = G.Length;
+            if (gap < 1e-12) return true;
+            double ua = Math.Max(0, u - h), ub = Math.Min(1, u + h), va = Math.Max(0, v - h), vb = Math.Min(1, v + h);
+            var Su = (S.PointAt(new Vector2d(ub, v)) - S.PointAt(new Vector2d(ua, v))) / (ub - ua);
+            var Sv = (S.PointAt(new Vector2d(u, vb)) - S.PointAt(new Vector2d(u, va))) / (vb - va);
+            var dx = Cols3(dir, -Su, -Sv, -G);
+            if (dx == null) return false;
+            tt += dx.Value.X; u = Math.Clamp(u + dx.Value.Y, 0, 1); v = Math.Clamp(v + dx.Value.Z, 0, 1);
+            if (dx.Value.Length < 1e-15) { gap = (p + dir * tt - S.PointAt(new Vector2d(u, v))).Length; return gap < 1e-9; }
+        }
+        return false;
     }
 }

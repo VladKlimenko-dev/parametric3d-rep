@@ -686,6 +686,47 @@ public static class TopologyConventions
         return votes == 0 ? null : Math.Sign(votes);
     }
 
+    static readonly bool RevHintOff = Environment.GetEnvironmentVariable("P3D_REVHINT") == "0";
+    /// <summary>Сторона кольца на поверхности вращения по точке грани: обход в развёртке (θ, v) и число оборотов вокруг точки.</summary>
+    static int? RevolvedHintVote(TFace f, Surfaces.RevolvedSurface rv, List<Vector3d> pts, Vector3d hint)
+    {
+        var w = rv.Axis.W.Normalized(); var o = rv.Axis.Origin;
+        var e1 = Vector3d.Cross(w, Math.Abs(w.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY).Normalized(); var e2 = Vector3d.Cross(w, e1);
+        double rmin = 1e-9 * Math.Max(1, (hint - o).Length);
+        Vector3d Radial(Vector3d q) { var d = q - o; return d - w * Vector3d.Dot(d, w); }
+        if (Radial(hint).Length < rmin || pts.Any(q => Radial(q).Length < rmin)) return null;
+        double Th(Vector3d q) { var d = q - o; return Math.Atan2(Vector3d.Dot(d, e2), Vector3d.Dot(d, e1)); }
+        double th0 = Th(hint);
+        var poly = new List<Vector2d>(pts.Count); double acc = 0, prevT = double.NaN;
+        foreach (var q in pts)
+        {
+            double t = Th(q) - th0;
+            if (double.IsNaN(prevT)) { while (t > Math.PI) t -= 2 * Math.PI; while (t <= -Math.PI) t += 2 * Math.PI; acc = t; }
+            else { double dt = t - prevT; while (dt > Math.PI) dt -= 2 * Math.PI; while (dt <= -Math.PI) dt += 2 * Math.PI; acc += dt; }
+            prevT = Th(q) - th0; poly.Add(new Vector2d(acc, rv.ProjectToUV(q).X));
+        }
+        double area2 = 0; for (int k = 0; k < poly.Count; k++) { var a0 = poly[k]; var b0 = poly[(k + 1) % poly.Count]; area2 += a0.X * b0.Y - a0.Y * b0.X; }
+        double span = Math.Max(1e-12, poly.Max(q => q.Y) - poly.Min(q => q.Y));
+        if (Math.Abs(area2) < 1e-9 * span) return null;
+        var uvh = rv.ProjectToUV(hint); double vh = uvh.X;
+        int wn = 0;
+        foreach (double sh in new[] { 0.0, 2 * Math.PI, -2 * Math.PI })
+        {
+            double tot = 0; var hp = new Vector2d(sh, vh);
+            for (int k = 0; k < poly.Count; k++) { var a0 = poly[k] - hp; var b0 = poly[(k + 1) % poly.Count] - hp; tot += Math.Atan2(a0.X * b0.Y - a0.Y * b0.X, Vector2d.Dot(a0, b0)); }
+            int wk = (int)Math.Round(tot / (2 * Math.PI)); if (wk != 0) { wn = wk; break; }
+        }
+        // ориентация развёртки относительно нормали грани: ∂θ — вращение вокруг оси, ∂v — вдоль образующей
+        double dv = Math.Max(1e-9, Math.Abs(rv.Base.T1 - rv.Base.T0) * 1e-5);
+        Vector3d pTh = Vector3d.Cross(w, Radial(hint));
+        Vector3d pV = rv.PointAt(new Vector2d(vh + dv, uvh.Y)) - rv.PointAt(new Vector2d(vh - dv, uvh.Y));
+        double orient = Vector3d.Dot(Vector3d.Cross(pTh, pV), f.NormalAt(hint));
+        if (Math.Abs(orient) < 1e-12 * pTh.Length * pV.Length) return null;
+        bool ccw = area2 > 0, inside = wn != 0;
+        int vote = ccw == inside ? 1 : -1;
+        return orient > 0 ? vote : -vote;
+    }
+
     private static int? SignFromMaterialSide(List<Ring> members, List<Ring> all)
     {
         int votes = 0;
@@ -739,6 +780,18 @@ public static class TopologyConventions
                     AnchorDebug?.Invoke($"cylinder ring: face {f.Tag} ccw {ccw} hint inside {inside} nside {nsd} vote {vote * nsd}");
                     return (int)(vote * nsd);
                 }
+            }
+            // k186: ПОВЕРХНОСТЬ ВРАЩЕНИЯ И ТОЧКА ГРАНИ — то же правило в развёртке (θ, параметр образующей). Кольцо, не
+            // обходящее ось (кромка поперечного отверстия на шейке), прежде голосовало направлением к ближайшей точке другого
+            // кольца грани: у шейки DLOT она по ту сторону отверстия (x = 438.6 при отверстии Ø4.8 у x = 467.5), хорда к ней
+            // шла через отверстие, сторона выходила наоборот, и стенка отверстия получала контуры против нормали (точный
+            // путь отвергнут, 35 гранёных граней). Ориентация развёртки — по знаку (∂θ × ∂v)·n в точке грани. Сфера — своё
+            // правило ниже. Мутация P3D_REVHINT=0.
+            if (f.InteriorHint is { } hr && !HintOff && !RevHintOff && src is Surfaces.RevolvedSurface rvh && SphereCentre(src) == null && !Wraps(pts, src)
+                && RevolvedHintVote(f, rvh, pts, hr) is int rvote)
+            {
+                AnchorDebug?.Invoke($"revolved ring: face {f.Tag} vote {rvote}");
+                return rvote;
             }
             // g.02: ГРАНЬ-СФЕРА С ОДНИМ КОЛЬЦОМ И ИЗВЕСТНОЙ ТОЧКОЙ ГРАНИ: стереографическая проекция из точки, противоположной
             // точке грани; кольцо обходит её образ (начало координат) против часовой — точка слева (обход «материал слева»,

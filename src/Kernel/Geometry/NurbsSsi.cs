@@ -236,6 +236,12 @@ public static class NurbsSsi
                             double sinA = Vector3d.Cross(n0, go).Length;
                             double kO = Ssi.NormalLip(other, x0, 0) ?? 0;
                             if (kS + kO > 0) hs = Math.Clamp(0.04 * sinA / (kS + kO), h / 64, h);
+                            // k186: шаг — не больше 1/16 метрической ширины прямоугольника грани в точке. У узкого куска (резец
+                            // резьбы: по v ≈ 1.8 мм при шаге h ≈ 0.24 мм) квадрат Q круга единственности задевает параллельную
+                            // ветви сторону, круги у точек вырождаются и не покрывают ячейки между точками — сертификат отказывал
+                            // (DLOT: фаска 30° × резец 1-1/8-12 UNF). Меняется только частота точек, не доказательство.
+                            double wMin = Math.Min((ub - ua) * su.Length, (vb - va) * sv.Length);
+                            if (WidthStepOn && wMin > 0) hs = Math.Max(Math.Min(hs, wMin / 16), h / 64);
                         }
                     }
                     travelled += hs;
@@ -271,6 +277,7 @@ public static class NurbsSsi
         // круги единственности у точек ломаной: наибольший доказанный радиус (от четверти прямоугольника вниз делением пополам)
         // Круги единственности у точек ломаной — в МЕТРИЧЕСКИХ параметрах (u·|Su|, v·|Sv| в точке): круг в параметрах сплайна —
         // эллипс, вытянутый как поверхность. Радиус — наибольший доказанный (от четверти прямоугольника вниз делением пополам).
+        bool rhoDbg = false;
         var discs = new Dictionary<(int, int), (double R, double Lu, double Lv)>();
         (double R, double Lu, double Lv) DiscOf(int bi, int bj)
         {
@@ -298,7 +305,10 @@ public static class NurbsSsi
                 }
                 return mx;
             }
-            double R = Math.Min(0.25 * Math.Max((ub - ua) * Lu, (vb - va) * Lv), 64 * Math.Max(step0, 1e-9)), res = 0;
+            // k186: начальный радиус — от шага не меньше наименьшего шага обхода (h/64). У стороны грани первые две точки ломаной
+            // совпадают (2e-14), круг начинался с 6.4e-8, а тёплый старт соседей рос лишь вдвое за точку — круги у входа ветви
+            // не покрывали ячеек (DLOT: резец резьбы, кусок шириной 0.09 мм). Поиск радиуса, не доказательство.
+            double R = Math.Min(0.25 * Math.Max((ub - ua) * Lu, (vb - va) * Lv), 64 * Math.Max(step0, StepFloorOn ? h / 64 : 1e-9)), res = 0;
             // тёплый старт: у соседней точки круг уже известен — начать с удвоенного
             foreach (int nb in new[] { bj - 1, bj + 1 })
                 if (discs.TryGetValue((bi, nb), out var nd) && nd.R > 0) { R = Math.Min(R, 2 * nd.R); break; }
@@ -311,7 +321,6 @@ public static class NurbsSsi
             }
             return discs[(bi, bj)] = (res, Lu, Lv);
         }
-        bool rhoDbg = false;
         bool UniqueNear(BezierPatch cell, Vector3d c3, double crad)
         {
             double cu0 = Math.Max(cell.U0, ua), cu1 = Math.Min(cell.U1, ub), cv0 = Math.Max(cell.V0, va), cv1 = Math.Min(cell.V1, vb);
@@ -321,13 +330,20 @@ public static class NurbsSsi
             var ccen = new Vector2d((cu0 + cu1) / 2, (cv0 + cv1) / 2); var (_, _, csu, csv) = GD(ccen);
             double cLu = Math.Max(csu.Length, 1e-9), cLv = Math.Max(csv.Length, 1e-9);
             // точки — из корзин в шаре близости ячейки (тот же шар, что у проверки «близко»)
-            var bestJ = new Dictionary<int, (int J, double D)>();
+            // k186: НЕСКОЛЬКО БЛИЖАЙШИХ ТОЧЕК ЛОМАНОЙ, А НЕ ОДНА. Ближайшая точка может быть концом ветви на стороне грани, где
+            // круг единственности вырождается (у края грани — доли микрона), тогда как соседняя точка той же ломаной покрывает
+            // ячейку кругом в десятые доли мм: резец резьбы на шейке DLOT (фаска 30°, цилиндр Ø28.385) — отказ сертификата у
+            // края куска, точный путь не проходил (3 мин многогранной булевой до отказа). Любой круг, содержащий ячейку,
+            // доказывает единственность — проверяются до UniqNearK ближайших (P3D_NURBSUNIQK, 1 — прежнее).
+            var bestJ = new Dictionary<int, List<(int J, double D)>>();
             foreach (int gi in grid.Within(c3, crad + 2 * h))
             {
                 var (ci, cj) = grid.Id[gi]; var dq = traced[ci][cj] - ccen; double dd = dq.X * dq.X * cLu * cLu + dq.Y * dq.Y * cLv * cLv;
-                if (!bestJ.TryGetValue(ci, out var bb) || dd < bb.D) bestJ[ci] = (cj, dd);
+                if (!bestJ.TryGetValue(ci, out var bl)) bestJ[ci] = bl = new List<(int, double)>();
+                bl.Add((cj, dd));
             }
-            foreach (var (i, (bj, _)) in bestJ)
+            foreach (var (i, list) in bestJ)
+            foreach (var (bj, _) in list.OrderBy(x => x.D).Take(UniqNearK))
             {
                 var qs = traced[i][bj]; var (R, Lu, Lv) = DiscOf(i, bj); if (R <= 0) continue;
                 bool inside = true;
@@ -568,6 +584,9 @@ public static class NurbsSsi
     /// <summary>Мутация: P3D_NURBSUNIQ=0 — ячейка у найденной кривой поясняется близостью (без доказательства единственности
     /// ветви), замыкание — только по близости в пространстве.</summary>
     static readonly bool Dbg = Environment.GetEnvironmentVariable("P3D_NURBSDBG") == "1";
+    static readonly int UniqNearK = int.TryParse(Environment.GetEnvironmentVariable("P3D_NURBSUNIQK"), out var k) && k > 0 ? k : 6;
+    static readonly bool StepFloorOn = Environment.GetEnvironmentVariable("P3D_NURBSSTEPFLOOR") != "0";   // k186
+    static readonly bool WidthStepOn = Environment.GetEnvironmentVariable("P3D_NURBSWSTEP") != "0";   // k186: шаг по ширине грани
     internal static readonly bool UniqOff = Environment.GetEnvironmentVariable("P3D_NURBSUNIQ") == "0";
     /// <summary>Мутация: P3D_NURBSSTEPCERT=0 — без проверки звеньев ломаных (скачок между ветвями не ловится).</summary>
     internal static readonly bool StepCertOff = Environment.GetEnvironmentVariable("P3D_NURBSSTEPCERT") == "0";
