@@ -1329,6 +1329,9 @@ public partial class MainWindow : Window
         View.SketchEntered += sk => { if (!SketchUndoOff) ResetSketchUndo(sk); };
         View.OpArrowClicked += i => { try { CurrentOperation?.ArrowClicked(i); } catch (Exception ex) { AppLog.Write("operation arrow", ex); } };
         View.ExpandEdge = r => r.Owner is Part p ? Topo.ChainRefs(p, r) : new List<PickRef> { r };
+        View.ExpandFace = r => r.Owner is Part p && p.QuiltOfFace(r.Id) == null
+            ? p.TangentFaceChain(r.Id).Select((f, i) => i == 0 ? r : new PickRef(f.Id, PickKind.Face, p, null)).ToList()
+            : new List<PickRef> { r };
         View.ReferencePicked += AddSketchReference;
         View.DimensionEditRequested += EditDimension;
         View.HandleDragStarted += OnHandleDragStarted;

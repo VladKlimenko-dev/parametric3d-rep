@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -21,7 +21,7 @@ namespace Parametric3D.Kernel.Topology;
 public static class BrepFile
 {
     const int Magic = 0x42443350;   // «P3DB»
-    public const int FormatVersion = 3;   // k153: 2 — с многогранной точной формой; k156: 3 — фасеты по общим вершинам (2 читается)
+    public const int FormatVersion = 4;   // k153: 2 — с многогранной точной формой; k156: 3 — фасеты по общим вершинам (2 читается)
     /// <summary>k156: мутация P3D_BREPINDEXED=0 — фасеты тройками точек (вид 2, файл больше).</summary>
     static readonly bool IndexedOff = Environment.GetEnvironmentVariable("P3D_BREPINDEXED") == "0";
     [ThreadStatic] static int _readVersion;
@@ -45,6 +45,83 @@ public static class BrepFile
         bool was = _threadTables; _threadTables = true;
         try { return Write(bodies); } finally { _threadTables = was; }
     }
+    static readonly bool RailsOff = Environment.GetEnvironmentVariable("P3D_BREPRAILS") == "0";
+    static bool Ruled(SectionSurface s) => !RailsOff && s.RuledData() != null && s.RailA!.Kind == "thread boundary" && s.RailB!.Kind == "thread boundary";
+
+    /// <summary>
+    /// Thread rail table: uniform samples, local degree-5 Lagrange interpolation (6 nearest nodes). A rail is a smooth
+    /// helix-like curve (radius ~10, ω ~3.5 rad/mm): cubic Catmull–Rom needed up to 65537 points per rail for 1e-9 mm
+    /// (a 50 mm NPT thread wrote ~540 MB); degree 5 reaches it with a few dozen.
+    /// </summary>
+    internal sealed class RailTable
+    {
+        readonly Vector3d[] _p; readonly double _t0, _t1;
+        public RailTable(Vector3d[] p, double t0, double t1) { _p = p; _t0 = t0; _t1 = t1; }
+        (int I0, double S) Locate(double t)
+        {
+            int n = _p.Length - 1; double span = _t1 - _t0;
+            double s = span == 0 ? 0 : Math.Clamp((t - _t0) / span, 0, 1) * n;
+            int m = Math.Min(5, n);
+            int i0 = Math.Clamp((int)Math.Floor(s) - (m - 1) / 2, 0, n - m);
+            return (i0, s);
+        }
+        public Vector3d Point(double t)
+        {
+            var (i0, s) = Locate(t); int m = Math.Min(5, _p.Length - 1);
+            var r = Vector3d.Zero;
+            for (int j = 0; j <= m; j++)
+            {
+                double l = 1;
+                for (int k = 0; k <= m; k++) if (k != j) l *= (s - (i0 + k)) / (double)(j - k);
+                r += _p[i0 + j] * l;
+            }
+            return r;
+        }
+        public Vector3d Deriv(double t)
+        {
+            var (i0, s) = Locate(t); int m = Math.Min(5, _p.Length - 1);
+            int n = _p.Length - 1; double span = _t1 - _t0;
+            if (n == 0 || span == 0) return Vector3d.Zero;
+            var r = Vector3d.Zero;
+            for (int j = 0; j <= m; j++)
+            {
+                double d = 0;
+                for (int q = 0; q <= m; q++)
+                {
+                    if (q == j) continue;
+                    double l = 1.0 / (j - q);
+                    for (int k = 0; k <= m; k++) if (k != j && k != q) l *= (s - (i0 + k)) / (double)(j - k);
+                    d += l;
+                }
+                r += _p[i0 + j] * d;
+            }
+            return r * (n / span);
+        }
+        /// <summary>Fewest uniform samples (doubling from 8) whose interpolation is within tol of the curve; null — none up to 65536.</summary>
+        public static Vector3d[]? Sample(ProcCurve3 c, double tol)
+        {
+            double t0 = c.T0, t1 = c.T1;
+            for (int n = 8; n <= 65536; n *= 2)
+            {
+                var pts = new Vector3d[n + 1];
+                for (int i = 0; i <= n; i++) pts[i] = c.PointAt(t0 + (t1 - t0) * i / n);
+                var rt = new RailTable(pts, t0, t1);
+                double worst = 0;
+                for (int i = 0; i < n && worst <= tol; i++)
+                    foreach (double f in new[] { 0.25, 0.5, 0.75 })
+                    {
+                        double t = t0 + (t1 - t0) * (i + f) / n;
+                        worst = Math.Max(worst, (rt.Point(t) - c.PointAt(t)).Length);
+                    }
+                if (worst <= tol) return pts;
+            }
+            return null;
+        }
+    }
+    [ThreadStatic] static Dictionary<ICurve3, RailTable>? _readRails;
+    /// <summary>Mutation P3D_BREPCOMP=0: the composition measure is not stored.</summary>
+    static readonly bool CompositionOff = Environment.GetEnvironmentVariable("P3D_BREPCOMP") == "0";
+
     /// <summary>Largest stored body cache (compressed bytes).</summary>
     public const long MaxBytes = 64L << 20;
 
@@ -86,10 +163,8 @@ public static class BrepFile
                 case IntersectionCurve3 ic: S(ic.A); S(ic.B); break;
                 case SectionIsoCurve sc: S(sc.Surface); break;
                 case ProcCurve3 pc when pc.ExactConic is { } ec: C3(ec); break;
-                // Exact thread rails tabulate to 1e-9 mm: up to 65537 points each, hundreds per thread —
-                // a 50 mm NPT thread wrote ~540 MB (JSON string limit, minutes of sampling). The thread is
-                // parametric and rebuilds in seconds, so its bodies are not cached in the file.
-                case ProcCurve3 pc when pc.Kind == "thread boundary" && !ThreadTablesOn:
+                // Thread rails: compact degree-5 table (RailTable); P3D_BREPRAILS=0 — not cached (rebuilt on open).
+                case ProcCurve3 pc when pc.Kind == "thread boundary" && RailsOff && !ThreadTablesOn:
                     throw new NotSupportedException("thread geometry is rebuilt on open");
             }
             _c3[c] = i = _c3l.Count; _c3l.Add(c);
@@ -105,6 +180,7 @@ public static class BrepFile
                 case OffsetSurface o: S(o.Base); break;
                 case TrimmedSurface t: S(t.Base); break;
                 case FacetedSurface f when f.Source != null: S(f.Source); break;
+                case SectionSurface ss when Ruled(ss): C3(ss.RailA!); C3(ss.RailB!); break;
             }
             _s[s] = i = _sl.Count; _sl.Add(s);
             return i;
@@ -158,6 +234,7 @@ public static class BrepFile
             {
                 switch (s)
                 {
+                    case SectionSurface rs when Ruled(rs): WC(_c3[rs.RailA!]); WC(_c3[rs.RailB!]); break;
                     case ExtrudedSurface e: WC(_c3[e.Base]); break;
                     case RevolvedSurface r: WC(_c3[r.Base]); break;
                     case OffsetSurface o: WS(_s[o.Base]); break;
@@ -226,6 +303,13 @@ public static class BrepFile
                 var list = v.Edges.Where(eIdx.ContainsKey).ToList();
                 w.Write(list.Count); foreach (var e in list) w.Write(eIdx[e]);
             }
+            // v4: builder composition measure (thread bodies)
+            if (!IndexedOff)
+            {
+                var cm = CompositionOff ? null : AnalyticVolume.Composition(b);
+                w.Write(cm != null);
+                if (cm is { } m) { w.Write(m.Volume); w.Write(m.Error); }
+            }
             // k153: многогранная точная форма
             bool ex = b.Exact != null && b.ExactAuthoritative;
             w.Write(ex);
@@ -271,6 +355,14 @@ public static class BrepFile
                 {
                     var (p0, p1) = sc.Ends;
                     w.Write((byte)8); w.Write(_s[sc.Surface]); w.Write(sc.V); w.Write(sc.U0); w.Write(sc.U1); V(w, p0); V(w, p1); Vs(w, sc.Seed); break;
+                }
+                case ProcCurve3 rc when rc.Kind == "thread boundary" && !RailsOff:
+                {
+                    var pts = RailTable.Sample(rc, 1e-9) ?? throw new NotSupportedException("thread rail does not tabulate within 1e-9 mm");
+                    w.Write((byte)10); w.Write(rc.Kind); w.Write(rc.T0); w.Write(rc.T1); w.Write(rc.IsClosed);
+                    w.Write(rc.ExactConic != null ? _c3[rc.ExactConic] : -1);
+                    Vs(w, pts);
+                    break;
                 }
                 case ProcCurve3 pc:
                 {
@@ -325,6 +417,13 @@ public static class BrepFile
                 {
                     w.Write((byte)8); w.Write(_s[t.Base]); w.Write(t.Loops.Count);
                     foreach (var l in t.Loops) { w.Write(l.Count); foreach (var p in l) { w.Write(p.X); w.Write(p.Y); } }
+                    break;
+                }
+                case SectionSurface rs when Ruled(rs):
+                {
+                    var (su, u0, u1, step) = rs.RuledData()!.Value;
+                    w.Write((byte)10); w.Write(rs.Closed); w.Write(_c3[rs.RailA!]); w.Write(_c3[rs.RailB!]);
+                    Ds(w, su); w.Write(u0); w.Write(u1); w.Write(step); Ds(w, rs.Breaks.ToArray());
                     break;
                 }
                 case SectionSurface ss:
@@ -445,8 +544,9 @@ public static class BrepFile
         using var r = new BinaryReader(z);
         if (r.ReadInt32() != Magic) throw new InvalidDataException("not a body record");
         int ver = r.ReadInt32();
-        if (ver != FormatVersion && ver != 2) throw new InvalidDataException($"body record version {ver}");
+        if (ver != FormatVersion && ver != 3 && ver != 2) throw new InvalidDataException($"body record version {ver}");
         _readVersion = ver;
+        _readRails = null;
         int nc = r.ReadInt32(), ns = r.ReadInt32(), n2 = r.ReadInt32();
         var c3 = new ICurve3[nc]; var ss = new ISurface3[ns];
         while (true)
@@ -514,6 +614,8 @@ public static class BrepFile
         }
         foreach (var e in edges) { int n = r.ReadInt32(); for (int k = 0; k < n; k++) e.CoEdges.Add(coList[r.ReadInt32()]); }
         foreach (var v in verts) { int n = r.ReadInt32(); for (int k = 0; k < n; k++) v.Edges.Add(edges[r.ReadInt32()]); }
+        (double V, double E)? comp = null;
+        if (_readVersion >= 4 && r.ReadBoolean()) comp = (r.ReadDouble(), r.ReadDouble());
         // k153: многогранная точная форма (свой реестр плоскостей; канонический номер — по коэффициентам)
         if (r.ReadBoolean())
         {
@@ -539,6 +641,7 @@ public static class BrepFile
             for (int i = 0; i < nsrc; i++) { uint k = r.ReadUInt32(); int si = r.ReadInt32(); sources[k] = si >= 0 ? ss[si] : null; }
             b.Exact = new Exact.ExactBody(new Exact.ExactSolid(reg, polys), sources);
         }
+        if (comp is { } cm) AnalyticVolume.RememberComposition(b, cm.V, cm.E);
         return new Restored(b, map);
     }
 
@@ -567,6 +670,17 @@ public static class BrepFile
                 double span = t1 - t0;
                 var pc = new ProcCurve3(t => CatmullRom(pts, span == 0 ? 0 : (t - t0) / span), t0, t1, closed, kind);
                 if (conic >= 0) pc.ExactConic = (EllipseCurve3)c3[conic];
+                return pc;
+            }
+            case 10:
+            {
+                string kind = r.ReadString(); double t0 = r.ReadDouble(), t1 = r.ReadDouble(); bool closed = r.ReadBoolean();
+                int conic = r.ReadInt32(); var pts = Vs(r);
+                if (pts.Length < 1) throw new InvalidDataException("empty rail table");
+                var rt = new RailTable(pts, t0, t1);
+                var pc = new ProcCurve3(rt.Point, t0, t1, closed, kind);
+                if (conic >= 0) pc.ExactConic = (EllipseCurve3)c3[conic];
+                (_readRails ??= new(ReferenceEqualityComparer.Instance))[pc] = rt;
                 return pc;
             }
             default: throw new InvalidDataException("curve kind " + k);
@@ -635,6 +749,16 @@ public static class BrepFile
                 }
                 var s = SectionSurface.FromTable(su, secs, closed, u0, u1, breaks, step, start, pieces);
                 return par ? WithParallel(s) : s;
+            }
+            case 10:
+            {
+                bool closed = r.ReadBoolean();
+                var a = (ProcCurve3)c3[r.ReadInt32()]; var b = (ProcCurve3)c3[r.ReadInt32()];
+                var su = Ds(r); double u0 = r.ReadDouble(), u1 = r.ReadDouble(), step = r.ReadDouble(); var breaks = Ds(r);
+                if (su.Length < 2) throw new InvalidDataException("ruled surface stations");
+                Func<double, Vector3d> D(ProcCurve3 c) => _readRails != null && _readRails.TryGetValue(c, out var t) ? t.Deriv
+                    : u => { double h = 1e-6 * Math.Max(1e-9, Math.Abs(c.T1 - c.T0)); return (c.PointAt(u + h) - c.PointAt(u - h)) / (2 * h); };
+                return SectionSurface.FromRails(a, b, D(a), D(b), su, closed, u0, u1, breaks, step);
             }
             default: throw new InvalidDataException("surface kind " + k);
         }

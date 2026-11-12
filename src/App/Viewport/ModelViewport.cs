@@ -882,7 +882,10 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         // u13: режим выбора «операция» и др. — щелчок по грани заменяется (операция, создавшая грань)
         if (PickMap != null) { r = PickMap(r); if (r.IsEmpty) return; }
         // п. 4: ребро — вместе с касательной цепочкой (Alt — одно ребро; u13: выключаемо кнопкой)
-        var group = r.Kind == PickKind.Edge && AutoChain && !req.Mods.HasFlag(KeyModifiers.Alt) && ExpandEdge != null ? ExpandEdge(r) : new List<PickRef> { r };
+        // Face: with the tangent face chain of its feature (a thread flank is hundreds of tangent patches); Alt — one face.
+        bool chainPick = AutoChain && !req.Mods.HasFlag(KeyModifiers.Alt);
+        var group = r.Kind == PickKind.Edge && chainPick && ExpandEdge != null ? ExpandEdge(r)
+                  : r.Kind == PickKind.Face && chainPick && ExpandFace != null ? ExpandFace(r) : new List<PickRef> { r };
         // One notification for the whole chain (a thread edge is hundreds of pieces).
         if (toggle && Selection.Contains(r.Id)) { Selection.SelectGroup(group, additive: true, remove: true); return; }
         Selection.SelectGroup(group, additive: toggle || add);
@@ -892,6 +895,8 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
     public Func<bool>? AccumulatePicks;
     /// <summary>Ребро → касательная цепочка рёбер (задаёт окно; null — только само ребро).</summary>
     public Func<PickRef, List<PickRef>>? ExpandEdge;
+    /// <summary>Face → its tangent face chain (null — only the face itself).</summary>
+    public Func<PickRef, List<PickRef>>? ExpandFace;
 
     /// <summary>Навести и выбрать в точке вида (доли размера 0..1) — для сценариев проверок.</summary>
     public void SimulatePick(double fx, double fy, bool select, bool add = false)

@@ -1,4 +1,4 @@
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -102,10 +102,14 @@ public static partial class DirectRound
                 var first = Section(ta); var last = Section(tb);
                 var a0 = first.Point(0); var b0 = first.Point(1);
                 var a1 = last.Point(0); var b1 = last.Point(1);
+                var railB = new ProcCurve3(t => Section(t).Point(1), ta, tb, false, "thread boundary");
+                var railA = new ProcCurve3(t => Section(t).Point(0), ta, tb, false, "thread boundary");
+                // Section(t) is the line railA(t) → railB(t): the file stores the patch by its two rails
+                surf.RailA = railA; surf.RailB = railB;
                 Add(new LineCurve3(a0, b0), a0, b0);
-                Add(new ProcCurve3(t => Section(t).Point(1), ta, tb, false, "thread boundary"), b0, b1);
+                Add(railB, b0, b1);
                 Add(new LineCurve3(a1, b1), b1, a1);
-                Add(new ProcCurve3(t => Section(t).Point(0), ta, tb, false, "thread boundary"), a1, a0);
+                Add(railA, a1, a0);
                 if (loop.Count < 3) { why = "collapsed thread patch"; return null; }
                 fd.Loops.Add(loop); faces.Add(fd);
             }

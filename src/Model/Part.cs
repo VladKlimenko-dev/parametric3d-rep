@@ -2325,6 +2325,40 @@ public sealed class Part : ModelItem
     public TFace? FindFace(uint id) => Bodies.SelectMany(b => b.Faces).FirstOrDefault(f => f.Id == id) ?? Quilts.SelectMany(q => q.Faces).FirstOrDefault(f => f.Id == id);
     public TEdge? FindEdge(uint id) => (EdgeIndexOff ? Bodies.SelectMany(b => b.Edges).FirstOrDefault(e => e.Id == id) : IndexedEdge(id)) ?? Quilts.SelectMany(q => q.Faces.SelectMany(f => f.Edges)).FirstOrDefault(e => e.Id == id);
     public TVertex? FindVertex(uint id) => Bodies.SelectMany(b => b.Vertices).FirstOrDefault(v => v.Id == id) ?? Quilts.SelectMany(q => q.Faces.SelectMany(f => f.Edges).SelectMany(e => new[] { e.V0, e.V1 })).FirstOrDefault(v => v.Id == id);
+    /// <summary>
+    /// Face picked on a thread or any G1 surface: the face and every face reached across tangent seams (or splits of one
+    /// surface) inside the same creating feature — the thread is 1788 tangent patches. Faces of another feature stop the
+    /// chain (a plane next to a separate fillet is not taken). Capped (cap) so one pick stays bounded.
+    /// </summary>
+    public List<TFace> TangentFaceChain(uint faceId, int cap = 20000)
+    {
+        var start = FindFace(faceId);
+        if (start == null) return new();
+        HashSet<uint>? scope = null;
+        foreach (var f in Descendants().OfType<Feature>())
+            if (f.CreatedFaceIds.Contains(faceId)) { scope = f.CreatedFaceIds.ToHashSet(); break; }
+        var res = new List<TFace> { start };
+        if (FaceChainOff) return res;
+        var seen = new HashSet<TFace>(ReferenceEqualityComparer.Instance) { start };
+        var q = new Queue<TFace>(); q.Enqueue(start);
+        while (q.Count > 0 && res.Count < cap)
+        {
+            var f = q.Dequeue();
+            foreach (var e in f.Edges)
+            {
+                var o = ReferenceEquals(e.FaceA, f) ? e.FaceB : e.FaceA;
+                if (o == null || seen.Contains(o) || (scope != null && !scope.Contains(o.Id))) continue;
+                var sa = GeometryAudit.AuthoritativeSurface(f) ?? f.Surface; var sb = GeometryAudit.AuthoritativeSurface(o) ?? o.Surface;
+                if (!ReferenceEquals(sa, sb) && !EdgeClass.IsTangentSeam(e)) continue;
+                seen.Add(o); res.Add(o); q.Enqueue(o);
+                if (res.Count >= cap) break;
+            }
+        }
+        return res;
+    }
+    /// <summary>Mutation P3D_FACECHAIN=0: a face pick is the single face.</summary>
+    public static readonly bool FaceChainOff = Environment.GetEnvironmentVariable("P3D_FACECHAIN") == "0";
+
     /// <summary>u13: квилт, которому принадлежит грань.</summary>
     public Quilt? QuiltOfFace(uint faceId) => Quilts.FirstOrDefault(q => q.Faces.Any(f => f.Id == faceId));
 

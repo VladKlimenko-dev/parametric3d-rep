@@ -318,14 +318,14 @@ public sealed class Selection
         if (logical.Count == 1) return LabelIn(logical[0]);
 
         var groups = logical
-            .GroupBy(r => ChainSize(r.Id) > 0 ? Loc.L("Цепочка рёбер") : KindName(r))
+            .GroupBy(r => ChainSize(r.Id) > 0 ? Loc.L(r.Kind == PickKind.Face ? "Цепочка граней" : "Цепочка рёбер") : KindName(r))
             .Select(g => g.Count() == 1 ? g.Key : $"{g.Key} ×{g.Count()}");
 
         return $"{logical.Count}: " + string.Join(", ", groups);
     }
 
     /// <summary>Label of a selected item; a chain head reads as the whole chain.</summary>
-    public string LabelIn(PickRef r) => ChainSize(r.Id) is var n && n > 0 ? Loc.L("Цепочка рёбер ({0})", n) + " — " + Label(r) : Label(r);
+    public string LabelIn(PickRef r) => ChainSize(r.Id) is var n && n > 0 ? Loc.L(r.Kind == PickKind.Face ? "Цепочка граней ({0})" : "Цепочка рёбер ({0})", n) + " — " + Label(r) : Label(r);
 
     /// <summary>Что под курсором — для той же панели.</summary>
     public string DescribeHover() => _hover.IsEmpty ? "" : Label(_hover);

@@ -166,10 +166,14 @@ static partial class Program
                 var chain = EdgeChain(mid);
                 double chainMs = cw.Elapsed.TotalMilliseconds;
                 double zLo = chain.Min(e => Math.Min(e.V0!.P.Z, e.V1!.P.Z)), zHi = chain.Max(e => Math.Max(e.V0!.P.Z, e.V1!.P.Z));
-                // Saving the document must not tabulate the thread (it rebuilds on open).
+                // The thread body is saved with the file: compact (rails, not section tables), quick, same body on read.
                 var saveWatch = Stopwatch.StartNew();
-                bool skipped = false; try { BrepFile.Write(new[] { body }); } catch (NotSupportedException) { skipped = true; }
-                Require(skipped && saveWatch.Elapsed.TotalMilliseconds < 500, $"thread body cache: skipped={skipped}, {saveWatch.Elapsed.TotalMilliseconds:0} ms");
+                var brep = BrepFile.Write(new[] { body }); double brepMs = saveWatch.Elapsed.TotalMilliseconds; saveWatch.Restart();
+                var back = BrepFile.ReadAll(brep).Single().Body; double readMs = saveWatch.Elapsed.TotalMilliseconds;
+                double backVol = AnalyticVolume.Of(back) ?? double.NaN;
+                Require(brep.Length < (4 << 20) && brepMs < 3000 && readMs < 3000, $"thread body cache: {brep.Length} bytes, write {brepMs:0} ms, read {readMs:0} ms");
+                Require(back.Faces.Count() == body.Faces.Count() && back.Edges.Count() == body.Edges.Count() && back.Edges.All(e => e.CoEdges.Count == 2), "restored thread topology");
+                Require(Math.Abs(backVol - expected) < expected * 2e-6, $"restored thread volume {backVol} vs {expected}");
                 if (Environment.GetEnvironmentVariable("P3D_PICKPROBE") == "1")
                 {
                     var sw = Stopwatch.StartNew(); int seams = chain.Count(e => EdgeClass.IsTangentSeam(e));
@@ -180,7 +184,7 @@ static partial class Program
                 }
                 Require(chainMs < 200, $"edge chain took {chainMs:0} ms");
                 Require(zHi - zLo > length - 3, $"edge chain covers z {zLo:0.###}..{zHi:0.###}, thread length {length}");
-                Log(new { test = "THREAD-CYLINDER-NPT-METRICS", exit, length, ms, volume, expected, faces = body.Faces.Count(), chain = chain.Count, chainMs, zLo, zHi });
+                Log(new { test = "THREAD-CYLINDER-NPT-METRICS", exit, length, ms, volume, expected, faces = body.Faces.Count(), chain = chain.Count, chainMs, zLo, zHi, brepBytes = brep.Length, brepMs, readMs });
             });
         }
         // User document (P3D_USERDOC=path): rebuild, save with display cache, reopen — no huge thread tables.
@@ -224,14 +228,44 @@ static partial class Program
                     Require(part.FindEdge(uint.MaxValue - 7) == null, "FindEdge found a missing id");
                     Require(chain.Count > 100 && lookupMs < 200, $"chain {chain.Count} edges, 3x lookup {lookupMs:0} ms");
                     Log(new { test = "THREAD-USERDOC-PICK", chain = chain.Count, lookupMs });
+                    // A thread face pick takes its whole tangent face chain, inside the thread feature only.
+                    var thr = part.Descendants().OfType<Feature>().OrderByDescending(f => f.CreatedFaceIds.Count).First();
+                    var ownIds = thr.CreatedFaceIds.ToHashSet();
+                    var f0 = tb.Faces.Where(f => ownIds.Contains(f.Id)).OrderBy(f => Math.Abs(f.Edges.First().Curve.PointAt((f.Edges.First().Curve.T0 + f.Edges.First().Curve.T1) / 2).Z - 75)).First();
+                    var fw = Stopwatch.StartNew(); var fchain = part.TangentFaceChain(f0.Id); double faceChainMs = fw.Elapsed.TotalMilliseconds;
+                    Require(fchain.Count > 100 && fchain.All(f => ownIds.Contains(f.Id)) && fchain.Select(f => f.Id).Distinct().Count() == fchain.Count && faceChainMs < 1000,
+                        $"face chain {fchain.Count} of {ownIds.Count} thread faces, {faceChainMs:0} ms");
+                    Log(new { test = "THREAD-USERDOC-FACECHAIN", faces = fchain.Count, threadFaces = ownIds.Count, faceChainMs });
+                    if (Environment.GetEnvironmentVariable("P3D_FACEPROBE") == "1")
+                    {
+                        var sw = Stopwatch.StartNew(); int same = 0, seam = 0, sharp = 0;
+                        var surfs = new HashSet<object>(ReferenceEqualityComparer.Instance);
+                        foreach (var f in tb.Faces) surfs.Add((object?)GeometryAudit.AuthoritativeSurface(f) ?? f.Surface);
+                        foreach (var e in tb.Edges)
+                        {
+                            if (e.FaceA == null || e.FaceB == null) continue;
+                            var sa = GeometryAudit.AuthoritativeSurface(e.FaceA) ?? e.FaceA.Surface; var sb = GeometryAudit.AuthoritativeSurface(e.FaceB) ?? e.FaceB.Surface;
+                            if (ReferenceEquals(sa, sb)) same++; else if (EdgeClass.IsTangentSeam(e)) seam++; else sharp++;
+                        }
+                        var created = part.Descendants().OfType<Feature>().Select(f => (f.Name, f.CreatedFaceIds.Count)).ToList();
+                        Log(new { probe = "faces", faces = tb.Faces.Count(), surfaces = surfs.Count, same, seam, sharp, ms = sw.Elapsed.TotalMilliseconds, created = string.Join(",", created) });
+                    }
                 }
                 Require(part.Features.All(f => f.Error == null), "rebuild: " + string.Join("; ", part.Features.Where(f => f.Error != null).Select(f => f.Error)));
                 w.Restart(); var text = DocumentFile.Save(part, pars, withDisplay: true); double saveMs = w.Elapsed.TotalMilliseconds;
                 string? note = DocumentFile.LastSaveNote;
-                Require(text.Length < 4 << 20, $"saved document is {text.Length} chars");
-                w.Restart(); var (again, ap) = DocumentFile.Load(text); again.Rebuild(ap); double reopenMs = w.Elapsed.TotalMilliseconds;
-                Require(again.Bodies.Count == part.Bodies.Count && again.Features.All(f => f.Error == null), "reopen");
-                Log(new { test = "THREAD-USERDOC-METRICS", rebuildMs, saveMs, chars = text.Length, note, reopenMs, mesh = part.Mesh != null });
+                Require(note == null, "body not saved: " + note);
+                Require(text.Length < 16 << 20, $"saved document is {text.Length} chars");
+                // Reopen takes the saved body — no rebuild — and it is the same valid body.
+                w.Restart(); var (again, ap) = DocumentFile.Load(text); double reopenMs = w.Elapsed.TotalMilliseconds;
+                Require(again.LoadNote == LoadNoteKind.Restored && again.Bodies.Count == part.Bodies.Count && !again.IsDirty, $"reopen: {again.LoadNote} {again.LoadNoteDetail}, bodies {again.Bodies.Count}, dirty {again.IsDirty}");
+                var b0 = part.Bodies.OrderByDescending(x => x.Faces.Count()).First(); var b1 = again.Bodies.OrderByDescending(x => x.Faces.Count()).First();
+                Require(b1.Faces.Count() == b0.Faces.Count() && b1.Edges.Count() == b0.Edges.Count(), "restored topology");
+                double v0 = AnalyticVolume.Of(b0) ?? double.NaN, v1 = AnalyticVolume.Of(b1) ?? double.NaN;
+                Require(Math.Abs(v1 - v0) < v0 * 2e-6, $"restored volume {v1} vs {v0}");
+                w.Restart(); var vr = SolidValidator.Validate(b1); double restoredValidMs = w.Elapsed.TotalMilliseconds;
+                Require(vr.IsValid, "restored body: " + vr);
+                Log(new { test = "THREAD-USERDOC-METRICS", rebuildMs, saveMs, chars = text.Length, note, reopenMs, restoredValidMs, mesh = part.Mesh != null });
             });
         // Keep the general periodic sweep covered now that standard trapezoids use ruled strips.
         foreach (bool left in new[] { false, true })

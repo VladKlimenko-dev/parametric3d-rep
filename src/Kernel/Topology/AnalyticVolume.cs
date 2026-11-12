@@ -125,6 +125,15 @@ public static class AnalyticVolume
             Print = TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff), Key = key,
             Volume = volume, Quad = error * 3 });
     }
+    /// <summary>Measure already established for this unchanged body (builder composition or the build-time integral). Stored
+    /// with the body cache so a restored thread body keeps it: outside the build context the per-face integral of the
+    /// run-out tip patches returns null (NPT 1/2-14 user file: 7 of 1788 faces), which made the restored volume unknown.</summary>
+    internal static (double Volume, double Error)? Composition(TSolid solid)
+    {
+        if (!_volCache.TryGetValue(solid, out var e) || e.Volume is not { } v || !double.IsFinite(v) || v <= 0 || e.Revision != solid.Revision) return null;
+        if (TopoFingerprint.Of(solid, display: SolidValidator.KeyDisplayOff) != e.Print) return null;
+        return (v, e.Quad / 3);
+    }
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, VolEntry> _volCache = new();
     static readonly bool VolCacheOff = Environment.GetEnvironmentVariable("P3D_VOLCACHE") == "0";
     static readonly bool VolParOff = Environment.GetEnvironmentVariable("P3D_VOLPAR") == "0";

@@ -385,6 +385,26 @@ public sealed class SectionSurface : ISurface3
     /// </summary>
     internal Func<double, double, Vector3d>? ExactDerivativeU { get; set; }
 
+    /// <summary>
+    /// Ruled formula surface: Section(u) = Line(RailA(u), RailB(u)) exactly (thread patches). The body file stores the
+    /// two rails instead of the section table (a 50 mm NPT thread: 1785 patches × 4097 table sections).
+    /// </summary>
+    public Curves.ProcCurve3? RailA { get; internal set; }
+    public Curves.ProcCurve3? RailB { get; internal set; }
+    internal (double[] StationU, double U0, double U1, double TableStep)? RuledData() => _gen == null || RailA == null || RailB == null ? null : (_stationU!, _u0, _u1, _tableStep);
+
+    /// <summary>Ruled surface restored from its rails (body file); da/db — rail derivatives.</summary>
+    internal static SectionSurface FromRails(Curves.ProcCurve3 a, Curves.ProcCurve3 b, Func<double, Vector3d> da, Func<double, Vector3d> db,
+                                             double[] stationU, bool closed, double u0, double u1, double[] breaks, double tableStep)
+    {
+        SweepSection Sec(double u) => SweepSection.Line(a.PointAt(u), b.PointAt(u));
+        var s = new SectionSurface(Sec, stationU, stationU.Select(Sec).ToArray(), closed, u0, u1, breaks, tableStep);
+        s.PreferExactFormula();
+        s.ExactDerivativeU = (u, v) => da(u) * (1 - v) + db(u) * v;
+        s.RailA = a; s.RailB = b;
+        return s;
+    }
+
     internal Vector3d DerivativeU(double u, double v)
     {
         if (ExactDerivativeU is { } derivative) return derivative(u, v);
