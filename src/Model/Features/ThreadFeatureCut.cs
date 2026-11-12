@@ -68,18 +68,7 @@ public sealed partial class CosmeticThreadFeature
         if (smoothExit)
         {
             double root = inner ? zr.Max(p => p.Y) : zr.Min(p => p.Y);
-            double rootRight = zr.Where(p => Math.Abs(p.Y - root) < 1e-12).Max(p => p.X);
-            double first = double.PositiveInfinity;
-            for (int i = 0; i < zr.Length; i++)
-            {
-                var a = zr[i]; var b = zr[(i + 1) % zr.Length];
-                if (Math.Abs(b.Y - a.Y) < 1e-14 || (a.Y - rFace) * (b.Y - rFace) > 0) continue;
-                first = Math.Min(first, a.X + (b.X - a.X) * (rFace - a.Y) / (b.Y - a.Y));
-            }
-            double end = len - rootRight, exitLen = Math.Min(lead, len + first - rootRight);
-            // Unsupported short/atypical profiles still receive a finite cosmetic overlay.
-            // Committing their exact body is separately rejected by the direct builder.
-            if (!double.IsFinite(exitLen) || exitLen <= 0) { end = len; exitLen = len / 2; }
+            var (end, exitLen) = ExitWindow(zr, rFace, root, lead, len);
             if (exitLen > 0)
             {
                 double t = Math.Clamp((z - end + exitLen) / exitLen, 0, 1);
@@ -89,6 +78,48 @@ public sealed partial class CosmeticThreadFeature
         }
         return (b0 + u * z + v * dr, u, v);
     }
+
+    static (double End, double ExitLen) ExitWindow(Vector2d[] zr, double rFace, double root, double lead, double len)
+    {
+        double rootRight = zr.Where(p => Math.Abs(p.Y - root) < 1e-12).Max(p => p.X);
+        double first = double.PositiveInfinity;
+        for (int i = 0; i < zr.Length; i++)
+        {
+            var a = zr[i]; var b = zr[(i + 1) % zr.Length];
+            if (Math.Abs(b.Y - a.Y) < 1e-14 || (a.Y - rFace) * (b.Y - rFace) > 0) continue;
+            first = Math.Min(first, a.X + (b.X - a.X) * (rFace - a.Y) / (b.Y - a.Y));
+        }
+        double end = len - rootRight, exitLen = Math.Min(lead, len + first - rootRight);
+        // Unsupported short/atypical profiles still receive a finite cosmetic overlay.
+        // Committing their exact body is separately rejected by the direct builder.
+        if (!double.IsFinite(exitLen) || exitLen <= 0) { end = len; exitLen = len / 2; }
+        return (end, exitLen);
+    }
+
+    /// <summary>
+    /// Axial positions z where <see cref="ToolFrame"/> is only C1 (the clamped smoothstep of the entry and of the exit
+    /// starts/ends): the sweep table must not interpolate across them. A 1-1/8-12 UNF cut on a Ø28.385 revolved neck had
+    /// the entry kink inside a span: 6th-order table vs formula 1.3e-7 mm (limit 2e-8), the exact sweep refused.
+    /// Mutation P3D_THREADLAWBREAKS=0 — no breaks.
+    /// </summary>
+    public static List<double> LawKinks(ThreadSpec spec, bool inner, double len, bool smoothExit, double? blankRadius = null)
+    {
+        var res = new List<double>();
+        if (LawBreaksOff) return res;
+        var zr = inner ? spec.IntZr : spec.ExtZr;
+        double lead = spec.Lead > Tol.Weld ? spec.Lead : spec.P * Math.Max(1, spec.Starts);
+        double mx = Math.Max(0, zr.Max(p => p.X));
+        res.Add(-mx); res.Add(-mx - lead);
+        if (smoothExit)
+        {
+            double rFace = blankRadius ?? (inner ? spec.IntStartR : spec.ExtStartR);
+            double root = inner ? zr.Max(p => p.Y) : zr.Min(p => p.Y);
+            var (end, exitLen) = ExitWindow(zr, rFace, root, lead, len);
+            if (exitLen > 0) { res.Add(end - exitLen); res.Add(end); }
+        }
+        return res;
+    }
+    static readonly bool LawBreaksOff = Environment.GetEnvironmentVariable("P3D_THREADLAWBREAKS") == "0";
 
     public static List<TSolid> CutTools(ThreadSpec spec, bool inner, Vector3d b0, Vector3d u,
         Vector3d e1, double len, bool left, bool smoothExit, double? blankRadius = null)
@@ -113,7 +144,8 @@ public sealed partial class CosmeticThreadFeature
             var curves = Enumerable.Range(0, zr.Length).Select(i => (ICurve3)new LineCurve3(
                 plane.ToWorld(zr[i]), plane.ToWorld(zr[(i + 1) % zr.Length]))).ToList();
             var section = ProfileBuilder.Build(plane, curves);
-            tools.Add(SweepOp.BuildByLaw(section, Law, 36 * spans, requireExact: true, lawSpans: spans));
+            var kinks = LawKinks(spec, inner, len, smoothExit, blankRadius).Select(z => (z + entry) / travel).Where(x => x > 1e-9 && x < 1 - 1e-9).ToList();
+            tools.Add(SweepOp.BuildByLaw(section, Law, 36 * spans, requireExact: true, lawSpans: spans, lawBreaks: kinks));
         }
         return tools;
     }

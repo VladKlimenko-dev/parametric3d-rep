@@ -17,7 +17,7 @@ static partial class Program
         var spec = ThreadDb.All.First(t => t.Designation == "M6" && t.Series == "coarse");
         Check("THREAD-TABLES", () =>
         {
-            Require(ThreadDb.LoadError == null && ThreadDb.All.Count == 308, "supplied catalog missing or changed");
+            Require(ThreadDb.LoadError == null && ThreadDb.All.Count == 309 && ThreadDb.All.Any(t => t.Designation == "1-9/16-10 UNF-2" && Math.Abs(t.P - 2.54) < 1e-9), "supplied catalog missing or changed");
             Require(ThreadDb.All.Select(t => t.Family).Distinct().Count() == 9, "families");
             foreach (var t in ThreadDb.All)
                 Require(t.P > 0 && t.ExtZr.Length >= 3 && t.IntZr.Length >= 3, t.Id);
@@ -44,7 +44,7 @@ static partial class Program
             var lines = File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "threads_table.csv"));
             lines[0] = "\uFEFF" + lines[0].TrimStart('\uFEFF');
             var rows = ThreadDb.ParseCsv(lines);
-            Require(rows.Count == 308 && rows.All(t => !string.IsNullOrEmpty(t.Family)), "CSV BOM/header/catalog");
+            Require(rows.Count == 309 && rows.All(t => !string.IsNullOrEmpty(t.Family)), "CSV BOM/header/catalog");
         });
         Check("THREAD-CATALOG-PREVIEW", () =>
         {

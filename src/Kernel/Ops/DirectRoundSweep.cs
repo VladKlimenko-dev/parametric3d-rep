@@ -42,7 +42,7 @@ public static partial class DirectRound
     /// </summary>
     internal static TSolid? ExactSweep(Profile section, ICurve3 path, double frac, double twistRad, bool keepOrientation,
         Func<double, (Vector3d O, Vector3d U, Vector3d V)>? frameLaw, ref string? why, int lawSpans = 1,
-        Func<double, Vector3d, Vector3d>? pointVelocity = null)
+        Func<double, Vector3d, Vector3d>? pointVelocity = null, IReadOnlyList<double>? lawBreaks = null)
     {
         if (frameLaw != null && (keepOrientation || Math.Abs(twistRad) > 1e-12)) { why = "exact sweep: a frame law with a twist or the kept orientation"; return null; }
         if (keepOrientation && Math.Abs(twistRad) > 1e-12) { why = "exact sweep: a twist with the kept orientation"; return null; }
@@ -166,7 +166,9 @@ public static partial class DirectRound
                     int NS = Math.Max(128, (int)Math.Ceiling(64 * turn * (Ub - Ua) / Math.Max(1e-12, (s1 - s0) * kU)));
                     var us = Enumerable.Range(0, NS + 1).Select(i => Ua + (Ub - Ua) * i / NS).ToList();
                     double turnSpan = turn * (Ub - Ua) / Math.Max(1e-12, (s1 - s0) * kU);     // k148: шаг таблицы — и по повороту касательной (винт)
-                    var surf = new SectionSurface(gen, us, us.Select(gen).ToList(), false, Ua, Ub, null, (Ub - Ua) / Math.Clamp(1024 * turnSpan, 4096, 20000));
+                    // joints of a frame law smooth only to first order (thread entry/exit): table pieces end there
+                    var lawBr = lawBreaks?.Where(x => x > sa && x < sb).Select(x => (x - s0) * kU).ToList();
+                    var surf = new SectionSurface(gen, us, us.Select(gen).ToList(), false, Ua, Ub, lawBr is { Count: > 0 } ? lawBr : null, (Ub - Ua) / Math.Clamp(1024 * turnSpan, 4096, 20000));
                     // таблица — представление формулы (как у лент): отход в пятой доле точности модели
                     double worst = 0;
                     for (int i = 0; i < 400; i++) { double U = Ua + (Ub - Ua) * (i + 0.5) / 400; var ta = surf.SectionAt(U); var ex = surf.ExactSectionAt(U); foreach (double v in new[] { 0.0, 0.5, 1.0 }) worst = Math.Max(worst, (ta.Point(v) - ex.Point(v)).Length); }

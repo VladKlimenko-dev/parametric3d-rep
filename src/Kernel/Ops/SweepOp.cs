@@ -232,7 +232,7 @@ public static class SweepOp
     /// lawSpans разбивает параметрический интервал на грани, не меняя закон поверхности.
     /// </summary>
     public static TSolid BuildByLaw(Profile section, Func<double, (Vector3d O, Vector3d U, Vector3d V)> law, int steps,
-        bool requireExact = false, int lawSpans = 1, Func<double, Vector3d, Vector3d>? pointVelocity = null)
+        bool requireExact = false, int lawSpans = 1, Func<double, Vector3d, Vector3d>? pointVelocity = null, IReadOnlyList<double>? lawBreaks = null)
     {
         if (section.IsEmpty) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Sweep: the section is empty or not closed.");
         var pl = section.Plane;
@@ -241,7 +241,7 @@ public static class SweepOp
         var cl = pl.ToLocal2(cen);
         var path = new ProcCurve3(s => { var f = law(s); return f.O + f.U * cl.X + f.V * cl.Y; }, 0, 1, false, "thread helix");
         string? why = null;
-        var ex = DirectRound.ExactSweep(section, path, 1, 0, false, law, ref why, lawSpans, pointVelocity);
+        var ex = DirectRound.ExactSweep(section, path, 1, 0, false, law, ref why, lawSpans, pointVelocity, lawBreaks);
         if (ex != null) return ex;
         if (requireExact)
             throw new RebuildException(OperationOutcome.Unsupported, "Sweep: exact construction failed: " + why);

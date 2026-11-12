@@ -300,55 +300,99 @@ public sealed class OpPanel
         return cb;
     }
     /// <summary>
-    /// List with typing (thread types): the field accepts text, the drop-down shows only items containing what is typed
-    /// (case and spaces ignored: "1-9/16", "unf 12"). The current item stays as text; focus selects it all, so typing
-    /// replaces it; Enter takes the first match; leaving without a choice restores the current item.
-    /// Mutation P3D_SEARCHLIST=0 — the plain ComboBox.
+    /// EDITABLE COMBO BOX (thread types): a text field with a drop-down arrow. The arrow (or Alt+Down / F4) opens the whole
+    /// list; typing opens it filtered to items containing what is typed (case and spaces ignored: "1-9/16", "unf 12").
+    /// Up/Down move in the list, Enter or a click takes the item; Enter with no highlighted item takes the first match;
+    /// Esc, or closing the list without a choice, restores the current item. Built from TextBox + ToggleButton + Popup
+    /// rather than ComboBox.IsEditable, whose own text matching would fight the filter.
+    /// Mutation P3D_SEARCHLIST=0 — the plain (non-editable) ComboBox.
     /// </summary>
     public Control SearchList(string label, Func<IReadOnlyList<string>> items, Func<int> get, Action<int> set, Func<bool>? visible = null, Func<bool>? enabled = null)
     {
         if (SearchListOff) return List(label, items, get, set, visible, enabled);
         var shown = items().ToList();
         string Cur() { int g = get(); return g >= 0 && g < shown.Count ? shown[g] : ""; }
-        var ab = new AutoCompleteBox
+        var tb = new TextBox { Text = Cur(), MinWidth = 120, VerticalAlignment = VerticalAlignment.Center };
+        var arrow = new ToggleButton { Content = "\u25BE", Width = 26, Padding = new Thickness(0), Focusable = false,
+            VerticalAlignment = VerticalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var lb = new ListBox { MaxHeight = 360 };
+        var drop = new Border { Child = lb, BorderThickness = new Thickness(1) };
+        drop.Bind(Border.BackgroundProperty, drop.GetResourceObservable("P3.PanelBg"));
+        drop.Bind(Border.BorderBrushProperty, drop.GetResourceObservable("P3.Border"));
+        var box = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), HorizontalAlignment = HorizontalAlignment.Stretch };
+        var pop = new Popup { Child = drop, PlacementTarget = box, Placement = PlacementMode.BottomEdgeAlignedLeft, IsLightDismissEnabled = true };
+        Grid.SetColumn(arrow, 1);
+        box.Children.Add(tb); box.Children.Add(arrow); box.Children.Add(pop);
+        bool sync = false, picked = false;
+        List<string> filtered = shown;
+        void Restore() { sync = true; try { tb.Text = Cur(); } finally { sync = false; } }
+        void Show(string? filter)
         {
-            ItemsSource = shown, MinimumPrefixLength = 1, MinimumPopulateDelay = TimeSpan.Zero, MaxDropDownHeight = 360,
-            IsTextCompletionEnabled = false, HorizontalAlignment = HorizontalAlignment.Stretch,
-            FilterMode = AutoCompleteFilterMode.Custom, Text = Cur(),
-        };
-        ab.TextFilter = (search, item) => SearchMatch(search, item);
-        bool sync = false;
-        void Pick(string? s)
-        {
-            if (sync || s == null) return;
-            int i = shown.IndexOf(s);
-            if (i < 0 || i == get()) return;
-            set(i); _op.FieldChanged();
+            filtered = filter == null ? shown : shown.Where(x => SearchMatch(filter, x)).ToList();
+            lb.ItemsSource = filtered;
+            lb.SelectedIndex = filter == null ? filtered.IndexOf(Cur()) : filtered.Count > 0 ? 0 : -1;
+            drop.MinWidth = box.Bounds.Width;
+            picked = false;
+            pop.IsOpen = filtered.Count > 0 || filter == null;
+            if (lb.SelectedItem != null) lb.ScrollIntoView(lb.SelectedItem);
         }
-        void Restore() { sync = true; try { ab.Text = Cur(); } finally { sync = false; } }
-        ab.SelectionChanged += (_, _) => Pick(ab.SelectedItem as string);
-        TextBox? inner = null;
-        ab.TemplateApplied += (_, e) => inner = e.NameScope.Find<TextBox>("PART_TextBox");
-        ab.GotFocus += (_, _) => inner?.SelectAll();
-        ab.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        void Commit(string? item)
         {
-            if (e.Key == Key.Escape) { ab.IsDropDownOpen = false; Restore(); return; }
-            if (e.Key != Key.Enter) return;
-            if (!shown.Contains(ab.Text ?? "") && shown.FirstOrDefault(x => SearchMatch(ab.Text, x)) is { } m) { ab.IsDropDownOpen = false; Pick(m); Restore(); }
-            e.Handled = true;
-        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
-        ab.LostFocus += (_, _) => { if (!ab.IsKeyboardFocusWithin && !ab.IsDropDownOpen && ab.Text != Cur()) Restore(); };
+            if (item == null) return;
+            picked = true;
+            pop.IsOpen = false;
+            int i = shown.IndexOf(item);
+            if (i >= 0 && i != get()) { set(i); _op.FieldChanged(); }
+            Restore();
+            tb.Focus(); tb.SelectAll();
+        }
+        tb.TextChanged += (_, _) => { if (!sync && tb.IsFocused) Show(tb.Text); };
+        tb.GotFocus += (_, _) => tb.SelectAll();
+        tb.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            switch (e.Key)
+            {
+                case Key.Down when e.KeyModifiers.HasFlag(KeyModifiers.Alt):
+                case Key.F4:
+                    if (pop.IsOpen) pop.IsOpen = false; else Show(null);
+                    e.Handled = true; break;
+                case Key.Down or Key.Up:
+                    if (!pop.IsOpen) Show(null);
+                    else if (filtered.Count > 0) lb.SelectedIndex = Math.Clamp(lb.SelectedIndex + (e.Key == Key.Down ? 1 : -1), 0, filtered.Count - 1);
+                    if (lb.SelectedItem != null) lb.ScrollIntoView(lb.SelectedItem);
+                    e.Handled = true; break;
+                case Key.Enter:
+                    Commit(pop.IsOpen && lb.SelectedItem is string si ? si
+                        : shown.Contains(tb.Text ?? "") ? tb.Text : shown.FirstOrDefault(x => SearchMatch(tb.Text, x)));
+                    e.Handled = true; break;
+                case Key.Escape:
+                    pop.IsOpen = false; Restore(); tb.SelectAll(); e.Handled = true; break;
+            }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        lb.Tapped += (_, _) => Commit(lb.SelectedItem as string);
+        // the press on the arrow light-dismisses an open list before Click: a fresh close means "close", not "reopen"
+        long closedAt = 0;
+        arrow.Click += (_, _) =>
+        {
+            if (pop.IsOpen) pop.IsOpen = false;
+            else if (Environment.TickCount64 - closedAt > 250) { Show(null); tb.Focus(); }
+            arrow.IsChecked = pop.IsOpen;
+        };
+        pop.Opened += (_, _) => arrow.IsChecked = true;
+        // closed with no match while typing — the text stays; closed by a click elsewhere — the current item returns
+        pop.Closed += (_, _) => { closedAt = Environment.TickCount64; arrow.IsChecked = false; if (!picked && !tb.IsFocused) Restore(); };
+        tb.LostFocus += (_, _) => { if (!pop.IsOpen && tb.Text != Cur()) Restore(); };
         _syncers.Add(() =>
         {
             var now = items();
-            if (!now.SequenceEqual(shown)) { shown = now.ToList(); sync = true; try { ab.ItemsSource = shown; } finally { sync = false; } }
-            if (!ab.IsKeyboardFocusWithin && ab.Text != Cur()) Restore();
+            if (!now.SequenceEqual(shown)) { shown = now.ToList(); if (!pop.IsOpen) filtered = shown; }
+            if (!tb.IsFocused && !pop.IsOpen && tb.Text != Cur()) Restore();
         });
-        var row = Row(label, ab);
+        var row = Row(label, box);
         When(row, visible);
-        if (enabled != null) _enabled.Add((ab, enabled));
-        SearchLists[label] = ab;
-        return ab;
+        if (enabled != null) _enabled.Add((box, enabled));
+        SearchLists[label] = tb;
+        return box;
     }
     /// <summary>Typed filter of <see cref="SearchList"/>: every typed word occurs in the item (case and spaces ignored).</summary>
     public static bool SearchMatch(string? search, string? item)
@@ -357,7 +401,7 @@ public sealed class OpPanel
         var it = new string(item.Where(c => !char.IsWhiteSpace(c)).Select(char.ToLowerInvariant).ToArray());
         return (search ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).All(w => it.Contains(w.ToLowerInvariant()));
     }
-    public readonly Dictionary<string, AutoCompleteBox> SearchLists = new();
+    public readonly Dictionary<string, TextBox> SearchLists = new();
     static readonly bool SearchListOff = Environment.GetEnvironmentVariable("P3D_SEARCHLIST") == "0";
     /// <summary>Списки панели по подписи (проверки).</summary>
     public readonly Dictionary<string, ComboBox> Lists = new();
