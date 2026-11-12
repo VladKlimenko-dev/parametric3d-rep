@@ -39,7 +39,7 @@ public sealed partial class CosmeticThreadOp : FeatureOp<CosmeticThreadFeature>
         _face.KeptLabel = () => FaceLabel(F.FaceId);
         _face.HoverIds = () => new[] { F.FaceId };
         p.Check("Косметическая", () => F.Cosmetic, v => F.Cosmetic = v, tip: "Обозначение: тело не меняется. Снять — вырез профиля из таблицы резьб.");
-        p.List("Тип резьбы", () => Types().Select(t => t.Display).ToList(), () => Types().FindIndex(t => t.Id == F.TypeId),
+        p.SearchList("Тип резьбы", () => Types().Select(t => t.Display).ToList(), () => Types().FindIndex(t => t.Id == F.TypeId),
             i => { var ts = Types(); if (i < ts.Count) { F.TypeId = ts[i].Id; F.LeftHand = ts[i].StdLeft; } },
             visible: () => ThreadDb.All.Count > 0);
         p.Info(TypeInfo);

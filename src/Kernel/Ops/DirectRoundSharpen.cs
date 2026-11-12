@@ -22,6 +22,16 @@ public static partial class DirectRound
     internal static TSolid? SharpenFaces(TSolid body, HashSet<TFace> vanish, double tol, ref string? why) => Sharpen(body, vanish, tol, out _, ref why);
 
     /// <summary>Радиус смещённой поверхности (цилиндр, круговое выдавливание, тор и шар); null — у грани нет радиуса.</summary>
+    /// <summary>Revolve of a segment parallel to the axis, off the axis — a cylinder. Mutation P3D_THREADREVCYL=0.</summary>
+    internal static bool RevolvedCylinder(RevolvedSurface rv, LineCurve3 gl)
+    {
+        var w = rv.Axis.W.Normalized(); var dl = gl.B - gl.A; double L = dl.Length;
+        if (!(L > 1e-12)) return false;
+        var ra = gl.A - rv.Axis.Origin; ra -= w * Vector3d.Dot(ra, w);
+        var rb = gl.B - rv.Axis.Origin; rb -= w * Vector3d.Dot(rb, w);
+        return Math.Abs(Math.Abs(Vector3d.Dot(dl / L, w)) - 1) < 1e-12 && ra.Length > 1e-9 && Math.Abs(ra.Length - rb.Length) < 1e-9 * Math.Max(1, ra.Length);
+    }
+    internal static readonly bool RevCylOff = Environment.GetEnvironmentVariable("P3D_THREADREVCYL") == "0";
     static double? OffsetRadius(TFace f, double d)
     {
         var src = GeometryAudit.AuthoritativeSurface(f);
@@ -41,6 +51,12 @@ public static partial class DirectRound
             {
                 var w = ex.Dir.Normalized(); var rad = probe.Value - ba.Frame.Origin; rad -= w * Vector3d.Dot(rad, w);
                 return ba.Radius + (Vector3d.Dot(rad, no) > 0 ? d : -d);
+            }
+            case RevolvedSurface { Base: LineCurve3 gl } rl when !RevCylOff && RevolvedCylinder(rl, gl):
+            {
+                var w = rl.Axis.W.Normalized(); var rad = probe.Value - rl.Axis.Origin; rad -= w * Vector3d.Dot(rad, w);
+                var ga0 = gl.A - rl.Axis.Origin; ga0 -= w * Vector3d.Dot(ga0, w);
+                return ga0.Length + (Vector3d.Dot(rad, no) > 0 ? d : -d);
             }
             case RevolvedSurface { Base: ArcCurve3 ga } rv:
             {

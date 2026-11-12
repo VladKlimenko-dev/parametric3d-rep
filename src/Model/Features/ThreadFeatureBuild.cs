@@ -23,6 +23,8 @@ public sealed partial class CosmeticThreadFeature
         {
             Kernel.Surfaces.CylinderSurface cs => (cs.Axis.Origin, cs.Axis.W.Normalized()),
             Kernel.Surfaces.ExtrudedSurface { Base: Kernel.Curves.ArcCurve3 ba } es when Math.Abs(Math.Abs(Vector3d.Dot(ba.Frame.W.Normalized(), es.Dir.Normalized())) - 1) < 1e-9 => (ba.Frame.Origin, es.Dir.Normalized()),
+            // a revolve of a segment parallel to its axis is a cylinder (a revolved part: fishing neck etc.); P3D_THREADREVCYL=0 — refused
+            Kernel.Surfaces.RevolvedSurface { Base: Kernel.Curves.LineCurve3 gl } rv when !DirectRound.RevCylOff && DirectRound.RevolvedCylinder(rv, gl) => (rv.Axis.Origin, rv.Axis.W.Normalized()),
             _ => null,
         };
         if (axis == null || DirectEdit.RadiusAfter(f, 0) is not { } r0 || DirectEdit.RadiusAfter(f, 1) is not { } r1)

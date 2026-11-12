@@ -299,6 +299,66 @@ public sealed class OpPanel
         Lists[label] = cb;
         return cb;
     }
+    /// <summary>
+    /// List with typing (thread types): the field accepts text, the drop-down shows only items containing what is typed
+    /// (case and spaces ignored: "1-9/16", "unf 12"). The current item stays as text; focus selects it all, so typing
+    /// replaces it; Enter takes the first match; leaving without a choice restores the current item.
+    /// Mutation P3D_SEARCHLIST=0 — the plain ComboBox.
+    /// </summary>
+    public Control SearchList(string label, Func<IReadOnlyList<string>> items, Func<int> get, Action<int> set, Func<bool>? visible = null, Func<bool>? enabled = null)
+    {
+        if (SearchListOff) return List(label, items, get, set, visible, enabled);
+        var shown = items().ToList();
+        string Cur() { int g = get(); return g >= 0 && g < shown.Count ? shown[g] : ""; }
+        var ab = new AutoCompleteBox
+        {
+            ItemsSource = shown, MinimumPrefixLength = 1, MinimumPopulateDelay = TimeSpan.Zero, MaxDropDownHeight = 360,
+            IsTextCompletionEnabled = false, HorizontalAlignment = HorizontalAlignment.Stretch,
+            FilterMode = AutoCompleteFilterMode.Custom, Text = Cur(),
+        };
+        ab.TextFilter = (search, item) => SearchMatch(search, item);
+        bool sync = false;
+        void Pick(string? s)
+        {
+            if (sync || s == null) return;
+            int i = shown.IndexOf(s);
+            if (i < 0 || i == get()) return;
+            set(i); _op.FieldChanged();
+        }
+        void Restore() { sync = true; try { ab.Text = Cur(); } finally { sync = false; } }
+        ab.SelectionChanged += (_, _) => Pick(ab.SelectedItem as string);
+        TextBox? inner = null;
+        ab.TemplateApplied += (_, e) => inner = e.NameScope.Find<TextBox>("PART_TextBox");
+        ab.GotFocus += (_, _) => inner?.SelectAll();
+        ab.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Key.Escape) { ab.IsDropDownOpen = false; Restore(); return; }
+            if (e.Key != Key.Enter) return;
+            if (!shown.Contains(ab.Text ?? "") && shown.FirstOrDefault(x => SearchMatch(ab.Text, x)) is { } m) { ab.IsDropDownOpen = false; Pick(m); Restore(); }
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+        ab.LostFocus += (_, _) => { if (!ab.IsKeyboardFocusWithin && !ab.IsDropDownOpen && ab.Text != Cur()) Restore(); };
+        _syncers.Add(() =>
+        {
+            var now = items();
+            if (!now.SequenceEqual(shown)) { shown = now.ToList(); sync = true; try { ab.ItemsSource = shown; } finally { sync = false; } }
+            if (!ab.IsKeyboardFocusWithin && ab.Text != Cur()) Restore();
+        });
+        var row = Row(label, ab);
+        When(row, visible);
+        if (enabled != null) _enabled.Add((ab, enabled));
+        SearchLists[label] = ab;
+        return ab;
+    }
+    /// <summary>Typed filter of <see cref="SearchList"/>: every typed word occurs in the item (case and spaces ignored).</summary>
+    public static bool SearchMatch(string? search, string? item)
+    {
+        if (item == null) return false;
+        var it = new string(item.Where(c => !char.IsWhiteSpace(c)).Select(char.ToLowerInvariant).ToArray());
+        return (search ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).All(w => it.Contains(w.ToLowerInvariant()));
+    }
+    public readonly Dictionary<string, AutoCompleteBox> SearchLists = new();
+    static readonly bool SearchListOff = Environment.GetEnvironmentVariable("P3D_SEARCHLIST") == "0";
     /// <summary>Списки панели по подписи (проверки).</summary>
     public readonly Dictionary<string, ComboBox> Lists = new();
 
