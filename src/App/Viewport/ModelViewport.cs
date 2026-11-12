@@ -556,9 +556,16 @@ public sealed partial class ModelViewport : OpenGlControlBase, Avalonia.Renderin
         if (_doc != null)
             foreach (var p in _doc.AllParts())
                 foreach (var q in p.Quilts) foreach (var sq in Simple(q)) foreach (var f in sq.Faces) Set(f.Id, 16);
-        foreach (var r in Selection.Items) if (r.Id != _listHover) SetRef(r, 2);
+        var lhc = _listHover != 0 && Selection.ChainSize(_listHover) > 0 ? new HashSet<uint>(Selection.ChainMembers(_listHover)) : null;
+        foreach (var r in Selection.Items) if (r.Id != _listHover && (lhc == null || !lhc.Contains(r.Id))) SetRef(r, 2);
         // k120 (п. 8.1): строка списка выбранного под курсором — её элемент подсвечен цветом наведения
-        if (_listHover != 0 && Selection.Items.FirstOrDefault(r => r.Id == _listHover) is { IsEmpty: false } lh) SetRef(lh, 1);
+        if (_listHover != 0 && Selection.Items.FirstOrDefault(r => r.Id == _listHover) is { IsEmpty: false } lh)
+        {
+            // a chain row lights the whole chain
+            var cm = Selection.ChainMembers(lh.Id);
+            if (cm.Count == 0) SetRef(lh, 1);
+            else { var cs = new HashSet<uint>(cm); foreach (var r in Selection.Items) if (cs.Contains(r.Id)) SetRef(r, 1); }
+        }
         if (!Selection.Hover.IsEmpty && !Selection.Contains(Selection.Hover.Id)) SetRef(Selection.Hover, 1);
         // k118 (замечание 08:54, п. 7): центр окружности, дуги, эллипса под курсором — подсвечена и сама кривая
         if (!CenterHoverOff && Selection.Hover is { Kind: PickKind.SketchPoint, Target: SkPoint hq } && CenterOwner(hq) is { } ow && !Selection.Contains(ow.Id))

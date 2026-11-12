@@ -214,7 +214,7 @@ public static class Strings
         // k120: панель детали, системы единиц, список выбора, замеры
         ["Время"] = "Time", ["Номер детали"] = "Part number", ["Система единиц"] = "Unit system",
         ["Новая система единиц"] = "New unit system", ["Создать"] = "Create", ["Создать систему единиц…"] = "Create new system…",
-        ["Замер"] = "Measurement", ["Замер: {0}"] = "Measurement: {0}", ["… и ещё {0}"] = "… and {0} more",
+        ["Замер"] = "Measurement", ["Замер: {0}"] = "Measurement: {0}", ["… и ещё {0}"] = "… and {0} more", ["Цепочка рёбер"] = "Edge chain", ["Цепочка рёбер ({0})"] = "Edge chain ({0} edges)", ["{0} (рёбер: {1})"] = "{0} ({1} edges)",
         ["Фигуры"] = "Shapes", ["Дерево"] = "Tree", ["Прямая правка"] = "Direct edit",
         ["сейчас ортогональ"] = "currently orthographic", ["сейчас перспектива"] = "currently perspective",
         ["Показывать: Плоскости"] = "Show: Planes", ["Показывать: Оси"] = "Show: Axes", ["Показывать: Начало координат"] = "Show: Origin",

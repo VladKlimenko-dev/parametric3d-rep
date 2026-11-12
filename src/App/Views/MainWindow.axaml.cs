@@ -3614,13 +3614,15 @@ public partial class MainWindow : Window
     {
         var sel = View.Selection;
         SelectionRows.Clear();
-        Row("Выбрано", sel.Count.ToString());
+        // a picked edge chain (thread: 800+ pieces) is ONE entry — one row, not a row per piece
+        Row("Выбрано", sel.LogicalCount == sel.Count ? sel.Count.ToString() : L("{0} (рёбер: {1})", sel.LogicalCount, sel.Count));
         if (SelListOff)
         {
             foreach (var r in sel.Items.Take(12)) Row(Selection.KindName(r), Selection.Label(r));
             return;
         }
-        var kinds = sel.Items.GroupBy(r => r.Kind).Select(g => (g.Key, g.Count())).ToList();
+        var logical = sel.Logical.ToList();
+        var kinds = logical.GroupBy(r => r.Kind).Select(g => (g.Key, g.Count())).ToList();
         bool Shown(PickKind k) => _listKinds.TryGetValue(k, out var on) ? on : sel.Accepts(k) || k is PickKind.Body or PickKind.Feature or PickKind.Assembly;
         if (kinds.Count > 1 || kinds.Any(k => !Shown(k.Key)))
         {
@@ -3634,14 +3636,14 @@ public partial class MainWindow : Window
             }
             PropsBody.Children.Add(wrap);
         }
-        var visible = sel.Items.Where(r => Shown(r.Kind)).ToList();
+        var visible = logical.Where(r => Shown(r.Kind)).ToList();
         foreach (var r in visible.Take(SelectionListMax))
         {
             var rr = r;
             var x = new Button { Content = "×", Classes = { "tool" }, Padding = new Thickness(6, 0), MinHeight = 20, VerticalAlignment = VerticalAlignment.Center };
             ToolTip.SetTip(x, L("Снять выбор"));
             x.Click += (_, _) => { View.HighlightSelected(0); View.Selection.Deselect(rr.Id); };
-            var text = new TextBlock { Text = Selection.KindName(r) + ": " + Selection.Label(r), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            var text = new TextBlock { Text = sel.ChainSize(r.Id) > 0 ? sel.LabelIn(r) : Selection.KindName(r) + ": " + Selection.Label(r), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
             ToolTip.SetTip(text, text.Text);
             var dp = new DockPanel();
             DockPanel.SetDock(x, Dock.Right);

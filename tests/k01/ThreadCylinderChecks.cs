@@ -212,6 +212,19 @@ static partial class Program
                     Console.WriteLine("PROF " + Parametric3D.Kernel.Diagnostics.Prof.Report());
                     foreach (var kv in part.LastFeatureMs) Console.WriteLine($"PROF feature {kv.Key.Name}: {kv.Value:0} ms");
                 }
+                {
+                    // Picking a thread edge: the whole chain is looked up by id (labels, list, operations) — must be quick and exact.
+                    var tb = part.Bodies.OrderByDescending(x => x.Faces.Count()).First();
+                    var hel = tb.Edges.Where(e => e.Curve is Parametric3D.Kernel.Curves.ProcCurve3 && e.V0 != null && e.V1 != null).ToList();
+                    var mid = hel.OrderBy(e => Math.Abs(e.Curve.PointAt((e.Curve.T0 + e.Curve.T1) / 2).Z - 75)).First();
+                    var chain = EdgeChain(mid);
+                    var lw = Stopwatch.StartNew();
+                    for (int rep = 0; rep < 3; rep++) foreach (var e in chain) Require(ReferenceEquals(part.FindEdge(e.Id), e), "FindEdge mismatch " + e.Id);
+                    double lookupMs = lw.Elapsed.TotalMilliseconds;
+                    Require(part.FindEdge(uint.MaxValue - 7) == null, "FindEdge found a missing id");
+                    Require(chain.Count > 100 && lookupMs < 200, $"chain {chain.Count} edges, 3x lookup {lookupMs:0} ms");
+                    Log(new { test = "THREAD-USERDOC-PICK", chain = chain.Count, lookupMs });
+                }
                 Require(part.Features.All(f => f.Error == null), "rebuild: " + string.Join("; ", part.Features.Where(f => f.Error != null).Select(f => f.Error)));
                 w.Restart(); var text = DocumentFile.Save(part, pars, withDisplay: true); double saveMs = w.Elapsed.TotalMilliseconds;
                 string? note = DocumentFile.LastSaveNote;

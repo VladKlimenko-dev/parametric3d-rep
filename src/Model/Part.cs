@@ -2288,9 +2288,42 @@ public sealed class Part : ModelItem
         return res;
     }
 
+    /// <summary>
+    /// Edge lookup by id through a per-body index (body, revision, face count). The linear walk enumerated all edges of the
+    /// body with Distinct per call: a 50 mm thread has 3583 edges, and the selection list, labels and operations look up
+    /// every one of 800+ chain pieces. A hit is re-checked by id; a miss rebuilds the index. P3D_EDGEINDEX=0 — linear.
+    /// </summary>
+    TEdge? IndexedEdge(uint id)
+    {
+        foreach (var b in Bodies)
+        {
+            int nf = b.Faces.Count();
+            var ix = _edgeIndex.GetValue(b, _ => new EdgeIndex());
+            lock (ix)
+            {
+                if (ix.Map == null || ix.Revision != b.Revision || ix.Faces != nf)
+                {
+                    ix.Map = new Dictionary<uint, TEdge>();
+                    foreach (var e in b.Edges) ix.Map.TryAdd(e.Id, e);
+                    ix.Revision = b.Revision; ix.Faces = nf;
+                }
+                if (ix.Map.TryGetValue(id, out var hit))
+                {
+                    if (hit.Id == id) return hit;
+                    ix.Map = null;   // ids renumbered — rebuild on the next call, answer by the walk now
+                    if (b.Edges.FirstOrDefault(e => e.Id == id) is { } w) return w;
+                }
+            }
+        }
+        return null;
+    }
+    sealed class EdgeIndex { public Dictionary<uint, TEdge>? Map; public long Revision; public int Faces; }
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TSolid, EdgeIndex> _edgeIndex = new();
+    public static readonly bool EdgeIndexOff = Environment.GetEnvironmentVariable("P3D_EDGEINDEX") == "0";
+
     /// <summary>Ищет топологический элемент по id во всех телах детали.</summary>
     public TFace? FindFace(uint id) => Bodies.SelectMany(b => b.Faces).FirstOrDefault(f => f.Id == id) ?? Quilts.SelectMany(q => q.Faces).FirstOrDefault(f => f.Id == id);
-    public TEdge? FindEdge(uint id) => Bodies.SelectMany(b => b.Edges).FirstOrDefault(e => e.Id == id) ?? Quilts.SelectMany(q => q.Faces.SelectMany(f => f.Edges)).FirstOrDefault(e => e.Id == id);
+    public TEdge? FindEdge(uint id) => (EdgeIndexOff ? Bodies.SelectMany(b => b.Edges).FirstOrDefault(e => e.Id == id) : IndexedEdge(id)) ?? Quilts.SelectMany(q => q.Faces.SelectMany(f => f.Edges)).FirstOrDefault(e => e.Id == id);
     public TVertex? FindVertex(uint id) => Bodies.SelectMany(b => b.Vertices).FirstOrDefault(v => v.Id == id) ?? Quilts.SelectMany(q => q.Faces.SelectMany(f => f.Edges).SelectMany(e => new[] { e.V0, e.V1 })).FirstOrDefault(v => v.Id == id);
     /// <summary>u13: квилт, которому принадлежит грань.</summary>
     public Quilt? QuiltOfFace(uint faceId) => Quilts.FirstOrDefault(q => q.Faces.Any(f => f.Id == faceId));
