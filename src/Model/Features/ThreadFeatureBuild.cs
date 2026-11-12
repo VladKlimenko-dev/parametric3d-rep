@@ -106,6 +106,11 @@ public sealed partial class CosmeticThreadFeature
         if (ctx.Bodies.Count == 1 && DirectCylinder(ctx.Bodies[0], f, spec, Internal, b0, u, e1,
                 len, FaceLength, r0, LeftHand, SmoothExit) is { } direct)
         {
+            // k189: the direct route is held to the same contract as the general one — every face on an exact,
+            // non-faceted surface; otherwise refuse and leave the body unchanged.
+            if (BooleanOp.GuaranteeOf(direct) != GuaranteeLevel.ExactAnalytic)
+                throw new RebuildException(OperationOutcome.Unsupported, "Thread: the direct route did not produce exact surfaces. The original body is unchanged.");
+            direct.Guarantee = GuaranteeLevel.ExactAnalytic;
             KernelContext.Checkpoint("thread.publish");
             ctx.Bodies[0] = direct;
             LastRoute = SmoothExit ? "direct-runout" : "direct-screw";
