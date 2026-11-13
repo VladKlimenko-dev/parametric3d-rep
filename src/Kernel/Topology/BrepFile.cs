@@ -2,6 +2,7 @@
 using OpenTK.Mathematics;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
+using Parametric3D.Kernel.Geometry;
 
 namespace Parametric3D.Kernel.Topology;
 
@@ -162,6 +163,7 @@ public static class BrepFile
             {
                 case IntersectionCurve3 ic: S(ic.A); S(ic.B); break;
                 case SectionIsoCurve sc: S(sc.Surface); break;
+                case NurbsImplicitCurve3 ni: S(ni.S); if (ni.Other is Ssi.ParamSurf ps) S(ps.S); else ShapeTag(ni.Other); break;
                 case ProcCurve3 pc when pc.ExactConic is { } ec: C3(ec); break;
                 // Thread rails: compact degree-5 table (RailTable); P3D_BREPRAILS=0 — not cached (rebuilt on open).
                 case ProcCurve3 pc when pc.Kind == "thread boundary" && RailsOff && !ThreadTablesOn:
@@ -227,6 +229,7 @@ public static class BrepFile
                 {
                     case IntersectionCurve3 ic: WS(_s[ic.A]); WS(_s[ic.B]); break;
                     case SectionIsoCurve sc: WS(_s[sc.Surface]); break;
+                    case NurbsImplicitCurve3 ni: WS(_s[ni.S]); if (ni.Other is Ssi.ParamSurf ps) WS(_s[ps.S]); break;
                     case ProcCurve3 pc when pc.ExactConic is { } ec: WC(_c3[ec]); break;
                 }
             }
@@ -356,6 +359,14 @@ public static class BrepFile
                     var (p0, p1) = sc.Ends;
                     w.Write((byte)8); w.Write(_s[sc.Surface]); w.Write(sc.V); w.Write(sc.U0); w.Write(sc.U1); V(w, p0); V(w, p1); Vs(w, sc.Seed); break;
                 }
+                case NurbsImplicitCurve3 ni:
+                {
+                    // k190: NURBS face × implicit surface (thread cut on a revolved blank): the spline, the other shape and
+                    // the seed in spline parameters — the curve is reconstructed exactly (points are re-projected on read).
+                    w.Write((byte)11); w.Write(_s[ni.S]); WriteShape(w, ni.Other);
+                    w.Write(ni.SeedUV.Count); foreach (var q in ni.SeedUV) V2(w, q);
+                    break;
+                }
                 case ProcCurve3 rc when rc.Kind == "thread boundary" && !RailsOff:
                 {
                     var pts = RailTable.Sample(rc, 1e-9) ?? throw new NotSupportedException("thread rail does not tabulate within 1e-9 mm");
@@ -373,6 +384,26 @@ public static class BrepFile
                     break;
                 }
                 default: throw new NotSupportedException("curve " + c.GetType().Name);
+            }
+        }
+
+        static byte ShapeTag(Ssi.Shape sh) => sh switch
+        {
+            Ssi.Plane => 1, Ssi.Cylinder => 2, Ssi.Sphere => 3, Ssi.Cone => 4, Ssi.Torus => 5, Ssi.ParamSurf => 6,
+            _ => throw new NotSupportedException("intersection shape " + sh.GetType().Name),
+        };
+
+        void WriteShape(BinaryWriter w, Ssi.Shape sh)
+        {
+            w.Write(ShapeTag(sh));
+            switch (sh)
+            {
+                case Ssi.Plane p: V(w, p.P); V(w, p.N); break;
+                case Ssi.Cylinder c: V(w, c.P); V(w, c.Axis); w.Write(c.R); break;
+                case Ssi.Sphere s: V(w, s.C); w.Write(s.R); break;
+                case Ssi.Cone k: V(w, k.Apex); V(w, k.Axis); w.Write(k.HalfAngle); break;
+                case Ssi.Torus t: V(w, t.C); V(w, t.Axis); w.Write(t.R); w.Write(t.r); break;
+                case Ssi.ParamSurf ps: w.Write(_s[ps.S]); break;
             }
         }
 
@@ -682,6 +713,22 @@ public static class BrepFile
                 if (conic >= 0) pc.ExactConic = (EllipseCurve3)c3[conic];
                 (_readRails ??= new(ReferenceEqualityComparer.Instance))[pc] = rt;
                 return pc;
+            }
+            case 11:
+            {
+                var ns = (NurbsSurface)ss[r.ReadInt32()];
+                Ssi.Shape other = r.ReadByte() switch
+                {
+                    1 => new Ssi.Plane(V(r), V(r)),
+                    2 => new Ssi.Cylinder(V(r), V(r), r.ReadDouble()),
+                    3 => new Ssi.Sphere(V(r), r.ReadDouble()),
+                    4 => new Ssi.Cone(V(r), V(r), r.ReadDouble()),
+                    5 => new Ssi.Torus(V(r), V(r), r.ReadDouble(), r.ReadDouble()),
+                    6 => new Ssi.ParamSurf(ss[r.ReadInt32()]),
+                    var t => throw new InvalidDataException("intersection shape " + t),
+                };
+                int n = r.ReadInt32(); var uv = new Vector2d[n]; for (int i = 0; i < n; i++) uv[i] = V2(r);
+                return new NurbsImplicitCurve3(ns, other, uv);
             }
             default: throw new InvalidDataException("curve kind " + k);
         }
