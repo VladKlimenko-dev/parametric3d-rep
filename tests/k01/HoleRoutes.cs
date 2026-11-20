@@ -166,5 +166,31 @@ static partial class Program
             else
                 Require(Math.Abs(pe.Volume - exact) < Math.Abs(vg - exact), "the exact route is not closer to the formula than the general one");
         });
+
+        Check("G8-HOLE-INVALID-HEAD-NO-MUTATION", () =>
+        {
+            // Негодная головка цекования (уже основного отверстия) отвергается ДО снятия материала: тело не должно
+            // измениться. Прежде в общем пути резец основного отверстия вычитался первым, а головка отвергалась после —
+            // тело успевало измениться.
+            var ctx = new BuildContext { Part = new Part("tx") };
+            var original = Box();
+            ctx.Bodies.Add(original);
+            var h = new HoleFeature("H")
+            {
+                Kind = HoleKind.Counterbore,
+                Diameter = new ValueRef(6),
+                HeadDiameter = new ValueRef(4),
+                HeadDepth = new ValueRef(8),
+                ThroughAll = false,
+                Depth = new ValueRef(8),
+                Direction = new Vector3d(0, 0, -1),
+            };
+            h.Points.Add(new Vector3d(30, 20, 20));
+            string? err = null;
+            try { h.Execute(ctx); } catch (Parametric3D.Core.RebuildException ex) { err = ex.Message; }
+            Require(err != null, "invalid counterbore head was not rejected");
+            Require(ctx.Bodies.Count == 1 && ReferenceEquals(ctx.Bodies[0], original),
+                "failed hole changed the bodies list or replaced the body");
+        });
     }
 }

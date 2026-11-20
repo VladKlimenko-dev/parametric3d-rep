@@ -351,6 +351,22 @@ public sealed class HoleFeature : Feature
         if (d <= Tol.Weld) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the diameter must be greater than zero.");
         if (Direction.LengthSquared < 1e-18) throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the direction is not set.");
 
+        // Проверка головки ДО снятия материала. Прежде в общем пути резец основного отверстия
+        // вычитался первым, а негодная головка отвергалась уже после — тело успевало измениться.
+        if (Kind == HoleKind.Counterbore)
+        {
+            if (HeadDiameter.Resolve(ctx.Parameters) <= d || HeadDepth.Resolve(ctx.Parameters) <= Tol.Weld)
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the counterbore must be wider than the hole and deeper than zero.");
+        }
+        else if (Kind == HoleKind.Countersink)
+        {
+            if (HeadDiameter.Resolve(ctx.Parameters) <= d)
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the countersink must be wider than the hole.");
+            double angle = HeadAngle.Resolve(ctx.Parameters);
+            if (angle <= 0 || angle >= 180)
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Hole: the countersink angle must be between 0 and 180 degrees.");
+        }
+
         var at = FollowFaces(ctx);
         // k153: привязки положения — точка по рёбрам грани входа / по оси, углу и торцу цилиндра
         var qb = ctx.Bodies.Select(Kernel.Ops.InstantPreview.Query).ToList();

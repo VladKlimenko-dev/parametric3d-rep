@@ -56,6 +56,9 @@ class Program
         }
         return b;
     }
+    static bool KnownScenario(string s)=>
+        s is "box" or "disjoint" or "overlap" or "sphere" or "round" or "sequence" or "roundhole" or "bugs" or "tree"
+        || s.StartsWith("holes");
     static object Quality(List<TSolid> bodies,string scenario)
     {
         var meshes=bodies.Select(b=>Tessellator.Tessellate(b)).ToList();
@@ -112,7 +115,11 @@ class Program
         Console.WriteLine(JsonSerializer.Serialize(new {test="edgeRefMid",t0=arc.T0,t1=arc.T1,
             distance=(r.Mid!.Value-arc.PointAt((arc.T0+arc.T1)/2)).Length}));
         var vr=new ValueRef(17){Formula="missing_parameter+1"};
-        Console.WriteLine(JsonSerializer.Serialize(new{test="invalidFormula",returned=vr.Resolve(new ParameterTable())}));
+        string? formulaError=null;double? formulaReturned=null;
+        try{formulaReturned=vr.Resolve(new ParameterTable());}catch(RebuildException ex){formulaError=ex.Message;}
+        var plain=new ValueRef(17);
+        Console.WriteLine(JsonSerializer.Serialize(new{test="invalidFormula",error=formulaError,
+            returned=formulaReturned,plainValue=plain.Resolve(new ParameterTable())}));
         var body=Box(); var face=body.Faces.First();face.Surface=new BrokenSurface();
         var mesh=Tessellator.Tessellate(body);
         Console.WriteLine(JsonSerializer.Serialize(new{test="swallowedFace",triangles=mesh.Indices.Length/3,
@@ -172,16 +179,33 @@ class Program
     }
     static void Main(string[] args)
     {
+        string[] flags = { "threads", "full", "qcut", "nomesh", "verify", "eager" };
+        string? scenario = args.FirstOrDefault(a => a is not ("-h" or "--help" or "help") && !flags.Contains(a));
         Console.WriteLine(JsonSerializer.Serialize(new{runtime=System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
-            cpu=Environment.ProcessorCount,scenario=args.FirstOrDefault(),chord=Tol.Chord}));
+            cpu=Environment.ProcessorCount,scenario,chord=Tol.Chord}));
         BooleanOp.Threads=Tessellator.Threads=1;
         if(args.Contains("threads")) BooleanOp.Threads=Tessellator.Threads=4;
         if(args.Contains("full")) BooleanOp.LocalizeBooleans=false;
         if(args.Contains("qcut")) BooleanOp.ExactCylinderCuts=true;
         if(args.Contains("nomesh")) BooleanOp.ExactMeshing=false;
         if(args.Contains("verify")) PlaneRegistry.VerifyEveryAnswer=true;
-        if(args[0]=="bugs"){Bugs();return;}
-        if(args[0]=="tree"){
+        if(scenario==null || scenario is "-h" or "--help" or "help")
+        {
+            Console.WriteLine("Usage: Speed.exe <scenario> [flags]\n" +
+                "Scenarios: box, disjoint, overlap, holes<N>, sphere, round, sequence, roundhole, bugs, tree\n" +
+                "Flags: threads, full, qcut, nomesh, verify, eager\n" +
+                "Environment: AUDIT_RUNS=<n> (default 4)");
+            return;
+        }
+        if(!KnownScenario(scenario))
+        {
+            Console.WriteLine($"Unknown scenario: {scenario}\n" +
+                "Scenarios: box, disjoint, overlap, holes<N>, sphere, round, sequence, roundhole, bugs, tree");
+            Environment.ExitCode = 2;
+            return;
+        }
+        if(scenario=="bugs"){Bugs();return;}
+        if(scenario=="tree"){
             var part=new Part("audit");TestGeometry.AddCube(part,60);
             for(int i=0;i<4;i++)part.AddFeature(new ProbeFeature(i));
             for(int i=0;i<4;i++){
@@ -201,7 +225,7 @@ class Program
             var warnings=new List<string>();BooleanOp.DeferMeshing=!args.Contains("eager");
             long alloc=GC.GetTotalAllocatedBytes(true);int gc0=GC.CollectionCount(0),gc2=GC.CollectionCount(2);
             var sw=Stopwatch.StartNew();
-            var b=Build(args[0],warnings);
+            var b=Build(scenario,warnings);
             double operations=sw.Elapsed.TotalMilliseconds;
             BooleanOp.DeferMeshing=false;
             if(BooleanOp.ExactMeshing&&!args.Contains("eager"))foreach(var s in b)BooleanOp.MeshExactlySolid(s,warnings);
@@ -214,7 +238,7 @@ class Program
                 splits=ExactBsp.Splits,cuts=ExactBsp.Cuts,depth=ExactBsp.MaxDepth,boxHits=ExactBsp.BoxHits,
                 tier1=PlaneRegistry.TotalTier1,tier2=PlaneRegistry.TotalTier2,tier3=PlaneRegistry.TotalTier3,
                 warnings}));
-            if(profile){Console.WriteLine(Prof.Report());Prof.Enabled=false;Console.WriteLine(JsonSerializer.Serialize(Quality(b,args[0])));}
+            if(profile){Console.WriteLine(Prof.Report());Prof.Enabled=false;Console.WriteLine(JsonSerializer.Serialize(Quality(b,scenario)));}
         }
     }
     sealed class ProbeFeature(int i):Feature
