@@ -572,7 +572,11 @@ public static class BrepFile
     {
         using var ms = new MemoryStream(data);
         using var z = new DeflateStream(ms, CompressionMode.Decompress);
-        using var r = new BinaryReader(z);
+        // BufferedStream: BinaryReader reads primitives in small chunks, and a DeflateStream read has per-call
+        // overhead — without a buffer, deserializing a large body cache (thread bodies) was ~100x slower than
+        // the decompression itself (4.5 s vs 6 ms).
+        using var bs = new BufferedStream(z);
+        using var r = new BinaryReader(bs);
         if (r.ReadInt32() != Magic) throw new InvalidDataException("not a body record");
         int ver = r.ReadInt32();
         if (ver != FormatVersion && ver != 3 && ver != 2) throw new InvalidDataException($"body record version {ver}");

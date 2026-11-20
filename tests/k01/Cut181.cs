@@ -96,5 +96,27 @@ static partial class Program
             Require(g == "ExactAnalytic" || g == g0, $"body {g}, input {g0}");
             Require(Math.Abs(added - want) < 1e-4 * want, $"added volume {added} vs {want}");
         });
+
+        Check("DRAFT-FAILED-NO-MUTATION-K181", () =>
+        {
+            // Неудачный уклон не должен оставить изменений: угол 90° снимает всё тело (half-space cut) — операция
+            // отказывает, дерево откатывает тело к состоянию до операции (тот же объект и тот же объём).
+            var p = new Part("draftfail");
+            var s0 = RectSketch(p, 0, -5, -30, 10, 60);          // тонкая плита 10×60
+            var body = new ExtrudeFeature("Body") { SketchId = s0.Id }; body.Side1.Distance = new ValueRef(40); p.AddFeature(body);
+            p.Rebuild(null);
+            var before = p.Bodies[0];
+            double v0 = p.Volume;
+            var df = new DraftFeature("Draft") { NeutralPoint = Vector3d.Zero, NeutralNormal = Vector3d.UnitZ, Angle = new ValueRef(90) };
+            df.OnFaces.Add(new Vector3d(5, 0, 20));
+            p.AddFeature(df);
+            p.Rebuild(null);
+            Log(new { test = "DRAFT-FAILED-NO-MUTATION-K181", error = df.Error, before = v0, after = p.Volume,
+                      sameBody = p.Bodies.Count == 1 && ReferenceEquals(p.Bodies[0], before),
+                      warnings = p.Warnings.ToList() });
+            Require(df.Error != null, "a draft that removes the whole body was not refused");
+            Require(p.Bodies.Count == 1 && ReferenceEquals(p.Bodies[0], before), "a failed draft changed the body");
+            Require(Math.Abs(p.Volume - v0) < 1e-6 * v0, $"volume changed from {v0} to {p.Volume}");
+        });
     }
 }
