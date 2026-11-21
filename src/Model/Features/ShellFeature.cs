@@ -68,6 +68,10 @@ public sealed class ShellFeature : Feature
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Shell: the wall is thicker than the radius of a round feature — reduce the thickness.");
             if (!ShellWhyOff && ctx.Warnings.Any(w => w.StartsWith("Shell") && w.Contains("the wall is too thick for the shape")))
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Shell: the wall is too thick for the shape (the offset face boundary self-intersects).");
+            if (!ShellWhyOff && ctx.Warnings.Any(w => w.Contains("a vertex has no consistent position on the offset faces")))
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Shell: a concave body with spherical rounds requires an offset vertex (not supported yet).");
+            if (!ShellWhyOff && ctx.Warnings.Any(w => w.Contains("a cylinder to offset is not bounded") || w.Contains("the ExtrudedSurface offset does not carry")))
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Shell: a partial cylinder face is not supported yet.");
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Shell: the body could not be hollowed.");
         }
     }

@@ -75,7 +75,11 @@ public sealed class DraftFeature : Feature
         }
         Kernel.OperationContract.Apply("Draft", ctx.Bodies, b => drafted = DraftOp.Apply(b, faces, NeutralPoint, NeutralNormal.Normalized(), deg, ctx.Warnings));
         if (!drafted)
-            throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Draft: the faces could not be drafted.");
+{
+    if (deg < 0 && ctx.Warnings.Any(w => w.StartsWith("Draft") && w.Contains("an outward draft is built only by plane replacement")))
+        throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Draft: an outward draft is built only by plane replacement, which declined (a non-planar face meets a drafted face).");
+    throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Draft: the faces could not be drafted.");
+}
     }
 
     /// <summary>
