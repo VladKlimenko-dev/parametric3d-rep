@@ -441,7 +441,7 @@ public static class ShellOp
         // угол у шапки пересекается со сферой меньшего радиуса, и полость получает точную сферическую стенку.
         // Полные сферы и вогнутые сферические полости в этом пути не поддерживаются (их берёт OffsetSolid или
         // прежний путь), поэтому ограничение — честный отказ.
-        if (spheres.Count > 1 || cylinders.Count > 0)
+        if (spheres.Count > 1 || (spheres.Count > 0 && cylinders.Count > 0))
         {
             warnings.Add("Shell: a body with several curved faces or mixed spherical/cylindrical faces is not supported in the halfspace path.");
             return false;
