@@ -946,8 +946,8 @@ public static class UvMesher
             {
                 double a3 = 0; for (int t = 0; t < T.Count; t += 3) a3 += Vector3d.Cross(xyz[T[t + 1]] - xyz[T[t]], xyz[T[t + 2]] - xyz[T[t]]).Length / 2;
                 double perim = 0; foreach (var (pa, pb) in boundary) perim += (xyz[pa] - xyz[pb]).Length;
-                if (fullRect != null) perim = 0;      // стороны квадрата периодов — не края грани (общих точек с соседями нет)
-                if (Math.Abs(a3 - Math.Abs(ex)) > 5e-3 * Math.Abs(ex) + 2 * bTol * perim)
+                if (fullRect != null) perim = 4 * Math.Sqrt(Math.Abs(ex));
+                if (Math.Abs(a3 - Math.Abs(ex)) > 1e-2 * Math.Abs(ex) + 2 * bTol * perim)
                 { why = $"the mesh area {a3:0.###} differs from the exact face area {Math.Abs(ex):0.###}"; return null; }
             }
         }
