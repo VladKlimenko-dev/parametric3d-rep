@@ -66,6 +66,8 @@ public sealed class ShellFeature : Feature
             // радиуса бобышки по окружности (так же отвечают SolidWorks и Creo: «толщина слишком велика»). Мутация P3D_SHELLWHY=0.
             if (!ShellWhyOff && ctx.Warnings.Any(w => w.StartsWith("Shell") && (w.Contains("would shrink to a point") || w.Contains("radius vanishes") && w.Contains("sharpen"))))
                 throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Shell: the wall is thicker than the radius of a round feature — reduce the thickness.");
+            if (!ShellWhyOff && ctx.Warnings.Any(w => w.StartsWith("Shell") && w.Contains("the wall is too thick for the shape")))
+                throw new RebuildException(Parametric3D.Kernel.OperationOutcome.InvalidInput, "Shell: the wall is too thick for the shape (the offset face boundary self-intersects).");
             throw new RebuildException(Parametric3D.Kernel.OperationOutcome.Unsupported, "Shell: the body could not be hollowed.");
         }
     }

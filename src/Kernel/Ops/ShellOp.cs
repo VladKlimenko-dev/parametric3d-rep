@@ -240,7 +240,11 @@ public static class ShellOp
                 if (!OutwardCylOff && faceThickness == null && OffsetOpenFaces(body, open) is { } openOut2 && OutwardByOffset(openOut2) is { } done2) return done2;
                 warnings.Add($"Shell: an outward wall is built only by plane offset, which declined: {why}" + (whyOffset != null ? $"; offsetting all faces: {whyOffset}" : "") + "."); return false;
             }
-            if (!Convex(body)) { warnings.Add($"Shell: a concave body is hollowed only by plane offset, which declined: {why}" + (whyOffset != null ? $"; offsetting all faces: {whyOffset}" : "") + "."); return false; }
+            if (!Convex(body))
+            {
+                if (TooThickOffset(why) || TooThickOffset(whyOffset)) { warnings.Add("Shell: the wall is too thick for the shape (the offset face boundary self-intersects)."); return false; }
+                warnings.Add($"Shell: a concave body is hollowed only by plane offset, which declined: {why}" + (whyOffset != null ? $"; offsetting all faces: {whyOffset}" : "") + "."); return false;
+            }
         }
         else if (outward || faceThickness != null)
         {
@@ -250,6 +254,7 @@ public static class ShellOp
         else if (!ConvexOff && !Convex(body))
         {
             // k182: причина отказа смещения всех граней — в предупреждении (оболочка толще трубки протяжки: «радиус исчезает»)
+            if (TooThickOffset(whyOffset)) { warnings.Add("Shell: the wall is too thick for the shape (the offset face boundary self-intersects)."); return false; }
             warnings.Add("Shell: the body is concave; its cavity cannot be built as an intersection of half-spaces" + (whyOffset != null ? $"; offsetting all faces: {whyOffset}" : "") + ".");
             return false;
         }
@@ -733,6 +738,14 @@ public static class ShellOp
     static Geometry.Ssi.Cylinder? CylOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Cylinder;
     static Geometry.Ssi.Sphere? SphereOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Sphere;
       static Geometry.Ssi.Cone? ConeOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Cone;
+      /// <summary>Смещение граней завело контуры в самопересечение: стенка слишком толстая для этой формы (карман/отверстие/вырез).</summary>
+      static bool TooThickOffset(string? why) =>
+          why != null && (
+              why.Contains("faces not meshed") ||
+              why.Contains("непарная сторона") ||
+              why.Contains("parameter-space triangles do not cover") ||
+              why.Contains("an edge would vanish") ||
+              why.Contains("edge vanishes"));
 
     /// <param name="cylOffset">Сдвиг цилиндрических граней вдоль наружной нормали (у выпуклой — радиус больше, у вогнутой — меньше).</param>
     static TSolid? OffsetBody(TSolid body, Func<TFace, Geometry.Ssi.Plane, bool, double> offset, IReadOnlyList<Vector3d>? open, string? tag, ref string? why, double cylOffset)
