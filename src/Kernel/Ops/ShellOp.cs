@@ -263,6 +263,8 @@ public static class ShellOp
         var planes = new List<(Vector3d P, Vector3d N, bool Open)>();
         // цилиндр грани: точка оси, ось, радиус и точка на грани (подсказка для стороны)
         var cylinders = new List<(TFace F, Vector3d Centre, Vector3d Axis, double R, Vector3d OnFace)>();
+        // сфера грани: центр, радиус и точка на грани (подсказка для стороны)
+        var spheres = new List<(TFace F, Vector3d Centre, double R, Vector3d OnFace)>();
 
         foreach (TFace f in body.Faces)
         {
@@ -278,6 +280,13 @@ public static class ShellOp
             {
                 var hint = f.Edges.Where(e => e.Curve != null).Select(e => e.Curve!.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1))).FirstOrDefault();
                 cylinders.Add((f, cs.P, cs.Axis.Normalized(), cs.R, hint));
+                continue;
+            }
+            // Сферическая грань (скругление вершины): в пути полупространств — по образцу цилиндрической ветви.
+            if (!SphereSurfOff && src is not null && !src.IsPlanar && SphereOfFace(f) is { } ss)
+            {
+                var hint = f.Edges.Where(e => e.Curve != null).Select(e => e.Curve!.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1))).FirstOrDefault();
+                spheres.Add((f, ss.C, ss.R, hint));
                 continue;
             }
             if (src == null || !src.IsPlanar)
@@ -427,6 +436,60 @@ public static class ShellOp
             if (cav.Count == 0) { warnings.Add("Shell: the wall is thicker than the body."); return false; }
         }
 
+        // СФЕРИЧЕСКИЕ ГРАНИ (выпуклая шапка скругления вершины): смещение сферы точно — радиус R − t.
+        // Плоские полупространства уже ограничили полость смещёнными плоскостями соседних граней; их общий
+        // угол у шапки пересекается со сферой меньшего радиуса, и полость получает точную сферическую стенку.
+        // Полные сферы и вогнутые сферические полости в этом пути не поддерживаются (их берёт OffsetSolid или
+        // прежний путь), поэтому ограничение — честный отказ.
+        if (spheres.Count > 1 || cylinders.Count > 0)
+        {
+            warnings.Add("Shell: a body with several curved faces or mixed spherical/cylindrical faces is not supported in the halfspace path.");
+            return false;
+        }
+        foreach (var (f, centre, radius, hintOnFace) in spheres)
+        {
+            Vector3d onFace = hintOnFace;
+            if ((onFace - centre).LengthSquared < 1e-18) continue;
+            var mbs = new Tess.MeshBuilder();
+            f.Surface.TessellateFace(f, mbs);
+            var mds = new Tess.MeshData();
+            mbs.FillInto(mds);
+            Vector3d nOut = Vector3d.Zero;
+            double bestDs = double.MaxValue;
+            for (int i = 0; i + 2 < mds.Indices.Length; i += 3)
+            {
+                Vector3d x = mbs.PositionsD[mds.Indices[i]], y = mbs.PositionsD[mds.Indices[i + 1]], z = mbs.PositionsD[mds.Indices[i + 2]];
+                Vector3d cr = Vector3d.Cross(y - x, z - x);
+                if (cr.LengthSquared < 1e-24) continue;
+                double d = ((x + y + z) / 3 - onFace).LengthSquared;
+                if (d < bestDs) { bestDs = d; nOut = cr.Normalized(); onFace = (x + y + z) / 3; }
+            }
+            if (nOut.LengthSquared < 1e-18) continue;
+            Vector3d radial = (onFace - centre).Normalized();
+            bool convex = Vector3d.Dot(nOut, radial) > 0;
+            bool isOpen = open != null && open.Any(q => OnAnyFace(f, q));
+            if (isOpen) { warnings.Add("Shell: an open spherical face is not supported in the halfspace path."); return false; }
+            if (!convex) { warnings.Add("Shell: a concave spherical face is not supported in the halfspace path."); return false; }
+            double r = radius - thickness;
+            if (convex && r <= Tol.Weld && !ThinRoundOff) { ShellDebug?.Invoke($"сферическое скругление R{radius:0.##} тоньше стенки {thickness:0.##} — не ограничивает полость"); continue; }
+            if (r <= Tol.Weld) { warnings.Add("Shell: the wall is thicker than the body."); return false; }
+
+            TSolid sphere = PrimitiveOp.Sphere(centre, r);
+            // Выпуклая шапка тоньше/вне полости: внутренняя сфера не пересекает уже построенную полость —
+            // она не ограничивает полость (острый угол смещённых плоскостей), как у тонкого цилиндрического
+            // скругления. Пробуем на копии, чтобы не потерять полость.
+            if (convex)
+            {
+                var probe = new List<TSolid>(cav.Select(TopologyClone.Deep));
+                BooleanOp.Intersect(probe, sphere, warnings);
+                if (probe.Count == 0) { ShellDebug?.Invoke($"сферическое скругление R{radius:0.##} не ограничивает полость (внутренняя сфера вне полости)"); continue; }
+            }
+            BooleanOp.Intersect(cav, sphere, warnings);
+            if (ShellDebug != null && cav.Count > 0)
+                ShellDebug($"после сферы R{r:0.##} ({(convex ? "выпуклый" : "вогнутый")}) полость {Math.Abs(Tess.MassProps.SignedVolume(Tess.Tessellator.Tessellate(cav[0]))):0.#}");
+            if (cav.Count == 0) { warnings.Add("Shell: the wall is thicker than the body."); return false; }
+        }
+
         cavity = cav[0];
 
         double cavityVol = Math.Abs(Tess.MassProps.SignedVolume(Tess.Tessellator.Tessellate(cavity)));
@@ -546,6 +609,8 @@ public static class ShellOp
     /// <summary>u10: мутации — цилиндр-поверхность в пути полупространств (P3D_SHELLCYLSURF=0) и тонкое скругление (P3D_SHELLTHINROUND=0).</summary>
     static readonly bool CylSurfOff = Environment.GetEnvironmentVariable("P3D_SHELLCYLSURF") == "0";
     static readonly bool ThinRoundOff = Environment.GetEnvironmentVariable("P3D_SHELLTHINROUND") == "0";
+    /// <summary>Сферическая грань в пути полупространств (выпуклая шапка скругления вершины). P3D_SHELLSPHERE=0 — прежний отказ.</summary>
+    static readonly bool SphereSurfOff = Environment.GetEnvironmentVariable("P3D_SHELLSPHERE") == "0";
     /// <summary>u10: мутация P3D_SHELLOUTCYL=0 — стенка наружу у тела из плоскостей и неполных цилиндров только сдвигом плоскостей (прежде).</summary>
     static readonly bool OutwardCylOff = Environment.GetEnvironmentVariable("P3D_SHELLOUTCYL") == "0";
 
@@ -600,6 +665,7 @@ public static class ShellOp
     /// <summary>Мутация P3D_SHELLCYL=0: сдвиг плоскостей только у тел из плоских граней (цилиндры — прежним путём).</summary>
     static readonly bool CylTweakOff = Environment.GetEnvironmentVariable("P3D_SHELLCYL") == "0";
     static Geometry.Ssi.Cylinder? CylOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Cylinder;
+    static Geometry.Ssi.Sphere? SphereOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Sphere;
 
     /// <param name="cylOffset">Сдвиг цилиндрических граней вдоль наружной нормали (у выпуклой — радиус больше, у вогнутой — меньше).</param>
     static TSolid? OffsetBody(TSolid body, Func<TFace, Geometry.Ssi.Plane, bool, double> offset, IReadOnlyList<Vector3d>? open, string? tag, ref string? why, double cylOffset)

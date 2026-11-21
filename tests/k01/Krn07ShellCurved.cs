@@ -2,6 +2,8 @@
 using Parametric3D.Kernel;
 using Parametric3D.Kernel.Ops;
 using Parametric3D.Kernel.Topology;
+using Parametric3D.Model;
+using Parametric3D.Model.Features;
 
 static partial class Program
 {
@@ -62,6 +64,27 @@ static partial class Program
                 if (!(Math.Abs(v - want) <= 1e-9 * want)) fails.Add($"{name}: V {v:R} vs formula {want:R}");
             }
             Require(fails.Count == 0, string.Join("; ", fails));
+        });
+
+        Check("KRN07-SHELL-VERTEX-ROUND", () =>
+        {
+            // Сферическая шапка скругления вершины в пути полупространств: раньше OffsetSolid отказывал
+            // («a vertex has no consistent position on the offset faces»), а полусферическая ветвь ещё не была
+            // реализована — оболочка куба со скруглением вершины честно отказывала. Теперь полость пересекается
+            // со сферой R − t (или, если внутренняя сфера вне полости, шапка не ограничивает полость).
+            var p = new Part("vr");
+            TestGeometry.AddCube(p, 100);
+            p.AddFeature(new VertexRoundFeature("VR") { Vertex = new Vector3d(50, 50, 50), Radius = new ValueRef(2.25) });
+            p.Rebuild(null);
+            var bl = new List<TSolid>(p.Bodies);
+            var w = new List<string>();
+            bool ok = ShellOp.Hollow(bl, 2.2, new List<Vector3d> { new Vector3d(50, 0, 50) }, w);
+            var b = bl[0];
+            double v = AnalyticVolume.Of(b) ?? double.NaN;
+            Log(new { test = "KRN07-SHELL-VERTEX-ROUND", ok, volume = v, faces = b.Faces.Count(), guarantee = b.Guarantee.ToString(), warnings = w.ToList() });
+            Require(ok, "vertex-round shell was not built: " + string.Join(" | ", w.Take(3)));
+            Require(b.Guarantee is GuaranteeLevel.ExactAnalytic or GuaranteeLevel.ExactPolyhedral, "not exact: " + b.Guarantee);
+            Require(SolidValidator.Validate(b).IsValid, SolidValidator.Validate(b).Summary());
         });
     }
 }
