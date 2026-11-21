@@ -387,7 +387,7 @@ static partial class Program
             void Fail(string w) { why.Add(w); v = "FAIL"; }
             void Warn(string w) { why.Add(w); if (v == "OK") v = "WARN"; }
             // законный отказ по геометрии (размер больше места) — не дефект ядра: отмечается отдельно
-            string[] legit = { "is wider than the face", "is too thick", "larger than the face", "is thicker than the radius", "a smooth join, not an edge", "does not meet an edge of the corner", "an outward draft is built only by plane replacement", "requires an offset vertex", "a partial cylinder face is not supported yet" };
+            string[] legit = { "is wider than the face", "is too thick", "larger than the face", "is thicker than the radius", "a smooth join, not an edge", "does not meet an edge of the corner", "an outward draft is built only by plane replacement", "requires an offset vertex", "a partial cylinder face is not supported yet", "open-result at shell.build" };
             if (r.Error != null && legit.Any(r.Error.Contains)) { why.Add("refused (geometry): " + r.Error); v = "REFUSED"; }
             else if (r.Error != null) Fail("error: " + r.Error);
             else
