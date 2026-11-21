@@ -416,8 +416,7 @@ public static class Tessellator
         }
         Trace("assembled");
         if (!(polyAuth && PolyFacetsOnly && PolyFine && !PolyWindingOld))
-            FixWindingByNormals(md, faces.Where(q => q.Surface is Surfaces.FacetedSurface fq && fq.Source != null
-                && Geometry.ExactEdges.ShapeOf(fq.Source) is { } shq && shq is not Geometry.Ssi.ParamSurf).Select(q => q.Id).ToHashSet());
+            FixWindingByNormals(md, SliverFaces(faces));
 
         Trace("fixwinding");
         double vol = MassProps.SignedVolume(md);
@@ -473,6 +472,19 @@ public static class Tessellator
     /// их нормали. Нормаль здесь — источник истины: её задаёт поверхность,
     /// зная, где у грани наружная сторона.
     /// </summary>
+    private static HashSet<uint> SliverFaces(IReadOnlyList<TFace> faces)
+    {
+        var set = faces.Where(q => q.Surface is Surfaces.FacetedSurface fq && fq.Source != null
+            && Geometry.ExactEdges.ShapeOf(fq.Source) is { } shq && shq is not Geometry.Ssi.ParamSurf).Select(q => q.Id).ToHashSet();
+        // k179 edgeOnly: грань направляющего лофта на NURBS может иметь щепку-складку параметризации; её обход
+        // восстанавливается по соседям так же, как у гранёных квадрик. Мутация P3D_NURBSSLIVERWIND=0.
+        if (Environment.GetEnvironmentVariable("P3D_NURBSSLIVERWIND") != "0")
+            foreach (var q in faces)
+                if (q.Surface is Surfaces.FacetedSurface fq2 && fq2.Source is Surfaces.NurbsSurface && (q.Tag ?? "").Contains("loft:side"))
+                    set.Add(q.Id);
+        return set;
+    }
+
     private static void FixWindingByNormals(MeshData md, HashSet<uint>? facetFaces = null)
     {
         var idx = md.Indices;
