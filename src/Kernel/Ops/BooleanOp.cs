@@ -427,6 +427,9 @@ public static class BooleanOp
     }
 
     static readonly bool FullValidateOff = Environment.GetEnvironmentVariable("P3D_FULLVAL") == "0";
+    /// <summary>Полная проверка сетки и у тела из плоскостей с цилиндрами в вычитании вблизи начала (иначе в многогранном результате
+    /// остаются негодные швы). P3D_FULLVALCYL=0 — прежняя проверка только B-rep.</summary>
+    static readonly bool CylFullValidateOff = Environment.GetEnvironmentVariable("P3D_FULLVALCYL") == "0";
     static readonly bool RoutePCurveOff = Environment.GetEnvironmentVariable("P3D_ROUTEPCURVE") == "0";
     static readonly bool TolStats = Environment.GetEnvironmentVariable("P3D_TOLSTATS") == "1";
     /// <summary>KRN-03: раздельные компоненты результата — отдельные тела, полости — оболочки (P3D_SPLITCOMPONENTS=0 — прежнее).</summary>
@@ -603,6 +606,8 @@ public static class BooleanOp
             // 3e4 мм — «стороны без пары»), и проверка сетки там не о геометрии (KRN-09) — там прежняя проверка B-rep.
             var (blo, bhi) = BoxOf(r); double far = Math.Max(Math.Max(blo.Length, bhi.Length), 0);
             bool coneLike = !FullValidateOff && far < 1000 && r.Faces.Any(fc => Geometry.ExactEdges.ShapeOf(Topology.GeometryAudit.AuthoritativeSurface(fc)) is not (Geometry.Ssi.Plane or Geometry.Ssi.Cylinder));
+            bool cylLike = !CylFullValidateOff && kind == BooleanKind.Subtract && far < 1000 && r.Faces.Any(fc => Geometry.ExactEdges.ShapeOf(Topology.GeometryAudit.AuthoritativeSurface(fc)) is Geometry.Ssi.Cylinder);
+            bool fullMesh = curved || coneLike || cylLike;
             // g.05: p-КРИВЫЕ ПРОВЕРЯЮТСЯ КАК У ТОЧНОГО ТЕЛА. Прежде проверка шла до того, как результату присвоен уровень гарантии,
             // и несогласованность p-кривых (ошибка только у точного тела) не замечалась; у тел из плоскостей и цилиндров p-кривые
             // не проверялись вовсе: результат с p-кривой в 2e-6 мм от ребра (допуск 1e-7) принимался как ExactAnalytic.
@@ -611,8 +616,8 @@ public static class BooleanOp
             Topology.ValidationReport v;
             using (Diagnostics.Prof.Time("аналитика (общая): проверка тела"))
             {
-                v = curved || coneLike ? Topology.SolidValidator.Validate(r) : Topology.SolidValidator.ValidateBRep(r);
-                if (!RoutePCurveOff && v.IsValid && !(curved || coneLike)) v.Merge(Topology.SolidValidator.ValidatePCurves(r));
+                v = fullMesh ? Topology.SolidValidator.Validate(r) : Topology.SolidValidator.ValidateBRep(r);
+                if (!RoutePCurveOff && v.IsValid && !fullMesh) v.Merge(Topology.SolidValidator.ValidatePCurves(r));
             }
             r.Guarantee = g0;
             if (!v.IsValid && RouteTrace)
