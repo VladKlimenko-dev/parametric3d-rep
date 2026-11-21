@@ -265,6 +265,8 @@ public static class ShellOp
         var cylinders = new List<(TFace F, Vector3d Centre, Vector3d Axis, double R, Vector3d OnFace)>();
         // сфера грани: центр, радиус и точка на грани (подсказка для стороны)
         var spheres = new List<(TFace F, Vector3d Centre, double R, Vector3d OnFace)>();
+        // коническая грань: вершина, ось, полуугол и точка на грани (подсказка для стороны)
+        var cones = new List<(TFace F, Vector3d Apex, Vector3d Axis, double HalfAngle, Vector3d OnFace)>();
 
         foreach (TFace f in body.Faces)
         {
@@ -287,6 +289,15 @@ public static class ShellOp
             {
                 var hint = f.Edges.Where(e => e.Curve != null).Select(e => e.Curve!.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1))).FirstOrDefault();
                 spheres.Add((f, ss.C, ss.R, hint));
+                continue;
+            }
+            // Коническая грань (revolve-cut / revolve): смещение поверхности — тот же конус с тем же полууглом
+            // и вершиной, сдвинутой вдоль оси на толщину / sin(полуугол). Полная коническая грань обрабатывается
+            // как вогнутая/выпуклая; неполный конус в этом пути не поддерживается.
+            if (!ConeSurfOff && src is not null && !src.IsPlanar && ConeOfFace(f) is { } cn)
+            {
+                var hint = f.Edges.Where(e => e.Curve != null).Select(e => e.Curve!.PointAt(0.5 * (e.Curve.T0 + e.Curve.T1))).FirstOrDefault();
+                cones.Add((f, cn.Apex, cn.Axis.Normalized(), cn.HalfAngle, hint));
                 continue;
             }
             if (src == null || !src.IsPlanar)
@@ -490,6 +501,59 @@ public static class ShellOp
             if (cav.Count == 0) { warnings.Add("Shell: the wall is thicker than the body."); return false; }
         }
 
+        // КОНИЧЕСКИЕ ГРАНИ (полный конус revolve/revolve-cut): смещение конуса — такой же полуугол,
+        // вершина сдвинута вдоль оси на t/sin(α). Выпуклая (материал внутри) ограничивает полость
+        // конусом меньшего радиуса (вычитаем всё вне), вогнутая (карман/отверстие) — большего (вычитаем сам конус).
+        if (cones.Count > 1 || (cones.Count > 0 && (cylinders.Count > 0 || spheres.Count > 0)))
+        {
+            warnings.Add("Shell: a body with several curved faces or mixed conical/cylindrical/spherical faces is not supported in the halfspace path.");
+            return false;
+        }
+        foreach (var (f, apex, axis, halfAngle, hintOnFace) in cones)
+        {
+            Vector3d onFace = hintOnFace;
+            Vector3d w = axis.LengthSquared > 1e-18 ? axis.Normalized() : Vector3d.UnitZ;
+            if ((onFace - apex).LengthSquared < 1e-18) continue;
+            var mbc = new Tess.MeshBuilder();
+            f.Surface.TessellateFace(f, mbc);
+            var mdc = new Tess.MeshData();
+            mbc.FillInto(mdc);
+            Vector3d nOut = Vector3d.Zero;
+            double bestDc = double.MaxValue;
+            for (int i = 0; i + 2 < mdc.Indices.Length; i += 3)
+            {
+                Vector3d x = mbc.PositionsD[mdc.Indices[i]], y = mbc.PositionsD[mdc.Indices[i + 1]], z = mbc.PositionsD[mdc.Indices[i + 2]];
+                Vector3d cr = Vector3d.Cross(y - x, z - x);
+                if (cr.LengthSquared < 1e-24) continue;
+                double d = ((x + y + z) / 3 - onFace).LengthSquared;
+                if (d < bestDc) { bestDc = d; nOut = cr.Normalized(); onFace = (x + y + z) / 3; }
+            }
+            if (nOut.LengthSquared < 1e-18) continue;
+            Vector3d rel = onFace - apex;
+            Vector3d radial = rel - w * Vector3d.Dot(rel, w);
+            if (radial.LengthSquared < 1e-18) continue;
+            bool convex = Vector3d.Dot(nOut, radial.Normalized()) > 0;
+            bool isOpen = open != null && open.Any(q => OnAnyFace(f, q));
+            if (isOpen) { warnings.Add("Shell: an open conical face is not supported in the halfspace path."); return false; }
+
+            double sinHalf = Math.Sin(halfAngle);
+            if (sinHalf <= 1e-9) { warnings.Add("Shell: a degenerate conical face is not supported in the halfspace path."); return false; }
+            Vector3d apexOff = convex ? apex + (thickness / sinHalf) * w : apex - (thickness / sinHalf) * w;
+            double len = Math.Max(1, Vector3d.Dot(hi - apex, w)) + 4 * thickness;
+            TSolid cone = ConeSolid(apexOff, w, halfAngle, len);
+            if (convex)
+            {
+                var outside = new List<TSolid> { Box(lo - new Vector3d(pad, pad, pad), hi + new Vector3d(pad, pad, pad)) };
+                BooleanOp.Subtract(outside, cone, warnings);
+                if (outside.Count == 0) continue;
+                BooleanOp.Subtract(cav, outside[0], warnings);
+            }
+            else BooleanOp.Subtract(cav, cone, warnings);
+            if (ShellDebug != null && cav.Count > 0)
+                ShellDebug($"после конуса half={halfAngle:0.###} ({(convex ? "выпуклый" : "вогнутый")}) полость {Math.Abs(Tess.MassProps.SignedVolume(Tess.Tessellator.Tessellate(cav[0]))):0.#}");
+            if (cav.Count == 0) { warnings.Add("Shell: the wall is thicker than the body."); return false; }
+        }
+
         cavity = cav[0];
 
         double cavityVol = Math.Abs(Tess.MassProps.SignedVolume(Tess.Tessellator.Tessellate(cavity)));
@@ -611,6 +675,8 @@ public static class ShellOp
     static readonly bool ThinRoundOff = Environment.GetEnvironmentVariable("P3D_SHELLTHINROUND") == "0";
     /// <summary>Сферическая грань в пути полупространств (выпуклая шапка скругления вершины). P3D_SHELLSPHERE=0 — прежний отказ.</summary>
     static readonly bool SphereSurfOff = Environment.GetEnvironmentVariable("P3D_SHELLSPHERE") == "0";
+    /// <summary>Коническая грань в пути полупространств (полный конус revolve/revolve-cut). P3D_SHELLCONE=0 — прежний отказ.</summary>
+    static readonly bool ConeSurfOff = Environment.GetEnvironmentVariable("P3D_SHELLCONE") == "0";
     /// <summary>u10: мутация P3D_SHELLOUTCYL=0 — стенка наружу у тела из плоскостей и неполных цилиндров только сдвигом плоскостей (прежде).</summary>
     static readonly bool OutwardCylOff = Environment.GetEnvironmentVariable("P3D_SHELLOUTCYL") == "0";
 
@@ -666,6 +732,7 @@ public static class ShellOp
     static readonly bool CylTweakOff = Environment.GetEnvironmentVariable("P3D_SHELLCYL") == "0";
     static Geometry.Ssi.Cylinder? CylOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Cylinder;
     static Geometry.Ssi.Sphere? SphereOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Sphere;
+      static Geometry.Ssi.Cone? ConeOfFace(TFace f) => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f)) as Geometry.Ssi.Cone;
 
     /// <param name="cylOffset">Сдвиг цилиндрических граней вдоль наружной нормали (у выпуклой — радиус больше, у вогнутой — меньше).</param>
     static TSolid? OffsetBody(TSolid body, Func<TFace, Geometry.Ssi.Plane, bool, double> offset, IReadOnlyList<Vector3d>? open, string? tag, ref string? why, double cylOffset)
@@ -827,6 +894,20 @@ public static class ShellOp
         var frame = new Frame3(at, u, v);
         var circle = new ArcCurve3(frame, r, 0, 2 * Math.PI);
         return ExtrudeOp.Build(ProfileBuilder.Build(frame, new List<ICurve3> { circle }), dir);
+    }
+
+    /// <summary>Полный конус: профиль (треугольник) в плоскости (u,w), вращение вокруг w; ось w от вершины к основанию.</summary>
+    private static TSolid ConeSolid(Vector3d apex, Vector3d axis, double halfAngle, double len)
+    {
+        Vector3d w = axis.Normalized();
+        Vector3d u = Math.Abs(w.X) < 0.9 ? Vector3d.Cross(w, Vector3d.UnitX).Normalized() : Vector3d.Cross(w, Vector3d.UnitY).Normalized();
+        Vector3d v = Vector3d.Cross(w, u).Normalized();
+        var profileFrame = new Frame3(apex, u, w);
+        var axisFrame = new Frame3(apex, u, v);
+        double r = len * Math.Tan(halfAngle);
+        Vector3d baseC = apex + w * len;
+        var curves = new List<ICurve3> { new LineCurve3(apex, apex + u * r), new LineCurve3(apex + u * r, baseC), new LineCurve3(baseC, apex) };
+        return RevolveOp.Build(ProfileBuilder.Build(profileFrame, curves), axisFrame, 0, 2 * Math.PI);
     }
 
     private static TSolid Box(Vector3d lo, Vector3d hi)
