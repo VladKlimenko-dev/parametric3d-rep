@@ -360,6 +360,7 @@ static partial class Program
         if (mode is "threadcylinder") ThreadCylinderChecks();
           if (mode is "threadmatrix") ThreadMatrixChecks();
           if (mode is "brep") OcctBrepChecks();
+          if (mode is "sphere") SphereP3dChecks();
         if (mode is "one")   // диагностика: один сценарий по идентификатору, трасса нового входа по PLANARDBG=1
         {
             if (Environment.GetEnvironmentVariable("PLANARDBG") == "1")

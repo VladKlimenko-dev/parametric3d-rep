@@ -1,6 +1,10 @@
 using OpenTK.Mathematics;
 using Parametric3D.Core;
+using Parametric3D.Kernel;
+using Parametric3D.Kernel.Geometry;
 using Parametric3D.Kernel.Ops;
+using Parametric3D.Kernel.Surfaces;
+using Parametric3D.Kernel.Topology;
 
 namespace Parametric3D.Model.Features;
 
@@ -234,6 +238,43 @@ public sealed class ExtrudeFeature : Feature
                     var bx = Kernel.Bounds3.Empty;
                     foreach (var e in t.Edges) { var c = e.Curve; for (int i = 0; i <= 16; i++) bx.Add(c.PointAt(c.T0 + (c.T1 - c.T0) * i / 16.0)); }
                     foreach (var v in t.Vertices) bx.Add(v.P);
+                    // Гладкие грани (полная сфера из одного полудиска revolve) не имеют рёбер по всему контуру:
+                    // добавляем габарит авторитетной поверхности, иначе промах выреза определяется неверно.
+                    foreach (var f in t.Faces)
+                    {
+                        var src = GeometryAudit.AuthoritativeSurface(f);
+                        if (src == null) continue;
+                        var sh = ExactEdges.ShapeOf(src);
+                        if (sh is Ssi.Sphere sp) { bx.Add(sp.C + new Vector3d(sp.R)); bx.Add(sp.C - new Vector3d(sp.R)); }
+                        else if (sh is Ssi.Cylinder cy)
+                        {
+                            // ось бесконечна — рёбра уже дали её концы; добавляем радиус в перпендикулярных направлениях
+                            var u = Math.Abs(cy.Axis.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY;
+                            u = Vector3d.Cross(cy.Axis, u).Normalized(); var v = Vector3d.Cross(cy.Axis, u).Normalized();
+                            foreach (var p in new[] { cy.P + (u + v) * cy.R, cy.P + (u - v) * cy.R, cy.P - (u + v) * cy.R, cy.P - (u - v) * cy.R }) bx.Add(p);
+                        }
+                        else if (sh is Ssi.Cone k)
+                        {
+                            // вершина и ось — рёбра дали концы; здесь достаточно точки вершины
+                            bx.Add(k.Apex);
+                        }
+                        else if (sh is Ssi.Torus tor)
+                        {
+                            var u = Math.Abs(tor.Axis.X) < 0.9 ? Vector3d.UnitX : Vector3d.UnitY;
+                            u = Vector3d.Cross(tor.Axis, u).Normalized();
+                            bx.Add(tor.C + u * (tor.R + tor.r) + tor.Axis * tor.r);
+                            bx.Add(tor.C - u * (tor.R + tor.r) - tor.Axis * tor.r);
+                            bx.Add(tor.C + u * (tor.R + tor.r) - tor.Axis * tor.r);
+                            bx.Add(tor.C - u * (tor.R + tor.r) + tor.Axis * tor.r);
+                        }
+                        else if (sh is Ssi.ParamSurf ps && ps.S is Parametric3D.Kernel.Surfaces.NurbsSurface ns)
+                        {
+                            // выпуклая оболочка по опорным точкам (NURBS лежит внутри)
+                            for (int iu = 0; iu < ns.CountU; iu++)
+                                for (int iv = 0; iv < ns.CountV; iv++)
+                                    bx.Add(ns.ControlPoint(iu, iv));
+                        }
+                    }
                     return bx;
                 }
                 var tb = Box(solid); bool hits = false;
