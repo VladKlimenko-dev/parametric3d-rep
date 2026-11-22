@@ -1,4 +1,4 @@
-﻿using Parametric3D.Kernel.Export;
+using Parametric3D.Kernel.Export;
 using Parametric3D.Kernel.Topology;
 
 namespace Parametric3D.Model;
@@ -166,6 +166,7 @@ public static class Exchange
         double acc = format == Format.Step ? StepAccuracyMm(text) : 0;
         if (!Kernel.Export.ImportHeal.Off)
             for (int i = 0; i < bodies.Count; i++) { Kernel.Export.ImportHeal.Heal(bodies[i], warnings, $"body {i + 1}", acc); Kernel.Export.ImportProgress.Set("heal", 0.92, 0.97, (i + 1.0) / bodies.Count); }
+          foreach (var b in bodies) Kernel.Export.StepImport.OrientExactToMesh(b);
         var part = new Part("импорт");
         foreach (var b in bodies) part.Bodies.Add(b);
         // k149: имена деталей файла (STEP: изделие оболочки), по порядку тел; нет — пусто

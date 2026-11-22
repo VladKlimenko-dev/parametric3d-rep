@@ -1108,6 +1108,26 @@ public static class StepImport
 
     internal static void OrientShellPublic(TSolid solid) => OrientShell(solid);
     [ThreadStatic] static int _orientFlips;
+
+    /// <summary>k194: после всех операций импорта сетка и точные поверхности могут смотреть в разные стороны.
+    /// Вычисляем точный объём без кэша; если он отрицательный — разворачиваем все грани целиком (коребра и фасеты).
+    /// P3D_ORIENTEXACT=0 — прежнее поведение.</summary>
+    static readonly bool OrientExactOff = Environment.GetEnvironmentVariable("P3D_ORIENTEXACT") == "0";
+    internal static void OrientExactToMesh(TSolid solid)
+    {
+        if (OrientExactOff) return;
+        try
+        {
+            var v = Topology.AnalyticVolume.OfUncached(solid);
+            if (v < 0)
+            {
+                foreach (var f in solid.Faces.ToList())
+                    FlipFace(f);
+            }
+        }
+        catch { /* точный объём недоступен — ориентацию не трогаем */ }
+    }
+
     /// <summary>k184: ориентация оболочки по фасетам; ответ — сколько граней развёрнуто.</summary>
     internal static int OrientShellCount(TSolid solid) { _orientFlips = 0; OrientShell(solid); return _orientFlips; }
     /// <summary>k126: сколько граней развернула бы ориентация оболочки (на копии; тело не меняется).</summary>
