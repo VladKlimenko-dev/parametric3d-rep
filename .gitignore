@@ -9,5 +9,7 @@ logs/**/a06/
 .vs/
 *.user
 /archive/kernel_k*.zip
+/photo_src.png
+/clean_photo.png
 logs/regress_*/
 !tests/stepfiles/*.step
