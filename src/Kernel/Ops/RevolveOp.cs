@@ -162,18 +162,6 @@ public static class RevolveOp
                 if (ea[j] != null) fl.Add(ea[j]!, eaRev[j]);
                 if (!full) fl.Add(ee[i], !eeRev[i]);
                 if (ea[i] != null) fl.Add(ea[i]!, !eaRev[i]);
-                if (full && ea[j] == null && ea[i] == null
-                    && loop.Curves[i] is ArcCurve3 ac && RadiusOf(ac.Frame.Origin, axis) < 1e-9 * (ac.Radius + 1))
-                {
-                    // Полный оборот, обе точки профиля лежат на оси, и дуга
-                    // центром лежит на оси (сфера из полукруга): заметаемые
-                    // окружности вырождены, поэтому шов — единственное ребро
-                    // границы, обходимое дважды в противоположных направлениях.
-                    // Для веретенообразного тора (лимон) центр дуги вне оси,
-                    // и шов не добавляем — сохраняется прежняя топология.
-                    fl.Add(es[i], esRev[i]);
-                    fl.Add(es[i], !esRev[i]);
-                }
                 shell.Add(f);
             }
 
