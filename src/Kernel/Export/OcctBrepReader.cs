@@ -31,11 +31,11 @@ public static class OcctBrepReader
         p++; int nLoc = I();
         if (nLoc != 0) { warnings?.Add("BREP: locations not supported"); return null; }
 
-        SkipSection(tk, ref p, "Curve2ds");
+        SkipCurve2ds(tk, ref p);
 
         SkipHeader(tk, ref p, "Curves");
         int nCurves = I();
-        var curves = new ICurve3?[nCurves];
+        var curves = new (ICurve3? C, Vector3d O, Vector3d D)[nCurves];
         for (int i = 0; i < nCurves; i++)
         {
             int type = I();
@@ -43,13 +43,14 @@ public static class OcctBrepReader
             {
                 var o = new Vector3d(D(), D(), D());
                 var d = new Vector3d(D(), D(), D());
-                curves[i] = new LineCurve3(o, o + d);
+                curves[i] = (null, o, d);   // параметрическая прямая, отрезок строим по диапазону ребра
             }
             else if (type == 7)
             {
-                int rational = I(); // periodic (не используем в минимальном читателе)
+                int periodic = I();
                 int rationalFlag = I();
                 int deg = I(), nPoles = I(), nKnots = I();
+                if (periodic != 0) { warnings?.Add($"BREP: periodic B-spline curve {i + 1} not yet supported"); return null; }
                 bool rat = rationalFlag != 0;
                 var poles = new Vector3d[nPoles];
                 var w = new double[nPoles];
@@ -59,9 +60,8 @@ public static class OcctBrepReader
                     w[k] = rat ? D() : 1.0;
                 }
                 var knots = new double[nKnots]; var mults = new int[nKnots];
-                for (int k = 0; k < nKnots; k++) knots[k] = D();
-                for (int k = 0; k < nKnots; k++) mults[k] = I();
-                curves[i] = new SplineCurve3(poles, deg, rat ? w : null, ExpandKnots(knots, mults));
+                for (int k = 0; k < nKnots; k++) { knots[k] = D(); mults[k] = I(); }
+                curves[i] = (new SplineCurve3(poles, deg, rat ? w : null, ExpandKnots(knots, mults)), default, default);
             }
             else { warnings?.Add($"BREP: curve type {type} not supported"); return null; }
         }
@@ -85,9 +85,10 @@ public static class OcctBrepReader
             }
             else if (type == 9)
             {
-                I(); I(); // uPeriodic, vPeriodic
-                int ur = I(), vr = I();
+                int ur = I(), vr = I();      // URational, VRational
+                int up = I(), vp = I();      // UPeriodic, VPeriodic
                 int ud = I(), vd = I(), nu = I(), nv = I(), nuk = I(), nvk = I();
+                if (up != 0 || vp != 0) { warnings?.Add($"BREP: periodic B-spline surface {i + 1} not yet supported"); return null; }
                 bool rat = ur != 0 || vr != 0;
                 var cp = new Vector3d[nu, nv];
                 var w = new double[nu, nv];
@@ -98,11 +99,9 @@ public static class OcctBrepReader
                         w[u, v] = rat ? D() : 1.0;
                     }
                 var ku = new double[nuk]; var mu = new int[nuk];
-                for (int k = 0; k < nuk; k++) ku[k] = D();
-                for (int k = 0; k < nuk; k++) mu[k] = I();
+                for (int k = 0; k < nuk; k++) { ku[k] = D(); mu[k] = I(); }
                 var kv = new double[nvk]; var mv = new int[nvk];
-                for (int k = 0; k < nvk; k++) kv[k] = D();
-                for (int k = 0; k < nvk; k++) mv[k] = I();
+                for (int k = 0; k < nvk; k++) { kv[k] = D(); mv[k] = I(); }
                 surfaces[i] = new NurbsSurface(cp, ud, vd, rat ? w : null, ExpandKnots(ku, mu), ExpandKnots(kv, mv));
             }
             else { warnings?.Add($"BREP: surface type {type} not supported"); return null; }
@@ -137,14 +136,14 @@ public static class OcctBrepReader
                     if (t == "1")
                     {
                         p++; r.CurveIndex = I();
-                        var vals = new List<double>();
-                        while (p < tk.Count && tk[p] != "2" && tk[p] != "0") vals.Add(D());
-                        if (vals.Count >= 2) { r.T0 = vals[^2]; r.T1 = vals[^1]; }
+                        I();                   // location index
+                        r.T0 = D(); r.T1 = D();  // first, last
                     }
                     else if (t == "2")
                     {
-                        p++; I();
-                        while (p < tk.Count && tk[p] != "1" && tk[p] != "0") p++;
+                        p++; I();              // pcurve index
+                        I();                   // location index
+                        D(); D();              // first, last
                     }
                     else break;
                 }
@@ -190,9 +189,12 @@ public static class OcctBrepReader
             if (r.Kind != "Ed") continue;
             var vr = r.Sub.Where(s => s.Index >= 1 && s.Index <= nShapes).ToList();
             if (vr.Count < 2) { warnings?.Add($"BREP: edge {num} lacks two vertices"); return null; }
-            var c = r.CurveIndex >= 1 && r.CurveIndex <= nCurves ? curves[r.CurveIndex - 1] : null;
-            if (c == null) { warnings?.Add($"BREP: edge {num} lacks a curve"); return null; }
-            edges[num] = new TEdge { V0 = vertices[vr[0].Index]!, V1 = vertices[vr[1].Index]!, Curve = c, Tolerance = r.Tolerance };
+            var c = r.CurveIndex >= 1 && r.CurveIndex <= nCurves ? curves[r.CurveIndex - 1] : default;
+            ICurve3? ec = c.C;
+            if (ec == null && c.D != default)
+                ec = new LineCurve3(c.O + c.D * r.T0, c.O + c.D * r.T1);
+            if (ec == null) { warnings?.Add($"BREP: edge {num} lacks a curve"); return null; }
+            edges[num] = new TEdge { V0 = vertices[vr[0].Index]!, V1 = vertices[vr[1].Index]!, Curve = ec, Tolerance = r.Tolerance };
         }
 
         for (int i = 0; i < recs.Count; i++)
@@ -258,6 +260,20 @@ public static class OcctBrepReader
                 { sh.Solid = solid; solid.Shells.Add(sh); }
         }
 
+        if (solid == null)
+        {
+            // Корень может быть гранью или оболочкой (у SMLib есть одиночная грань).
+            var root = recs[^1];
+            if (root.Kind == "Fa" && faces[1] is { } rf)
+            {
+                var sh = new TShell(); rf.Shell = sh; sh.Faces.Add(rf);
+                solid = new TSolid(); sh.Solid = solid; solid.Shells.Add(sh);
+            }
+            else if (root.Kind == "Sh" && shells[1] is { } rsh)
+            {
+                solid = new TSolid(); rsh.Solid = solid; solid.Shells.Add(rsh);
+            }
+        }
         if (solid == null) { warnings?.Add("BREP: no solid"); return null; }
         return solid;
     }
@@ -276,6 +292,28 @@ public static class OcctBrepReader
     static void SkipFlags(List<string> tk, ref int p)
     {
         if (p < tk.Count && tk[p].Length > 1 && tk[p].All(c => c is '0' or '1')) p++;
+    }
+
+    static void SkipCurve2ds(List<string> tk, ref int p)
+    {
+        SkipHeader(tk, ref p, "Curve2ds");
+        int n = int.Parse(tk[p++], CultureInfo.InvariantCulture);
+        for (int i = 0; i < n; i++)
+        {
+            int type = int.Parse(tk[p++], CultureInfo.InvariantCulture);
+            if (type == 1) p += 4;                      // x y dx dy
+            else if (type == 2) p += 3;                 // x y r
+            else if (type == 7)
+            {
+                int rat = int.Parse(tk[p + 1], CultureInfo.InvariantCulture);
+                int nP = int.Parse(tk[p + 3], CultureInfo.InvariantCulture);
+                int nK = int.Parse(tk[p + 4], CultureInfo.InvariantCulture);
+                p += 5; // periodic rational degree nPoles nKnots
+                for (int k = 0; k < nP; k++) { p += 2; if (rat != 0) p++; }
+                p += 2 * nK;                             // knots + mults interleaved
+            }
+            else throw new FormatException($"BREP: curve2d type {type} not supported");
+        }
     }
 
     static void Expect(List<string> tk, ref int p, string s)
