@@ -158,22 +158,21 @@ public static class RevolveOp
                 // общего пути отказывал по тору («torus face without an interior point»). P3D_REVOLVEHINT=0 — прежнее.
                 if (!HintOff && (full || PartialHint)) { var cc = loop.Curves[i]; f.InteriorHint = Rot(cc.PointAt(0.5 * (cc.T0 + cc.T1)), axis, 0.5 * (a0 + a1)); System.Threading.Interlocked.Increment(ref HintsSet); }
                 var fl = f.AddLoop(true);
-                if (full)
+                if (!full) fl.Add(es[i], esRev[i]);
+                if (ea[j] != null) fl.Add(ea[j]!, eaRev[j]);
+                if (!full) fl.Add(ee[i], !eeRev[i]);
+                if (ea[i] != null) fl.Add(ea[i]!, !eaRev[i]);
+                if (full && ea[j] == null && ea[i] == null
+                    && loop.Curves[i] is ArcCurve3 ac && RadiusOf(ac.Frame.Origin, axis) < 1e-9 * (ac.Radius + 1))
                 {
-                    // Полный оборот: шов по кривой профиля входит в границу дважды
-                    // (вперёд и назад) — как у сферы из полукруга, где обе точки
-                    // профиля лежат на оси и заметаемые окружности вырождаются.
+                    // Полный оборот, обе точки профиля лежат на оси, и дуга
+                    // центром лежит на оси (сфера из полукруга): заметаемые
+                    // окружности вырождены, поэтому шов — единственное ребро
+                    // границы, обходимое дважды в противоположных направлениях.
+                    // Для веретенообразного тора (лимон) центр дуги вне оси,
+                    // и шов не добавляем — сохраняется прежняя топология.
                     fl.Add(es[i], esRev[i]);
-                    if (ea[j] != null) fl.Add(ea[j]!, eaRev[j]);
                     fl.Add(es[i], !esRev[i]);
-                    if (ea[i] != null) fl.Add(ea[i]!, !eaRev[i]);
-                }
-                else
-                {
-                    fl.Add(es[i], esRev[i]);
-                    if (ea[j] != null) fl.Add(ea[j]!, eaRev[j]);
-                    fl.Add(ee[i], !eeRev[i]);
-                    if (ea[i] != null) fl.Add(ea[i]!, !eaRev[i]);
                 }
                 shell.Add(f);
             }
