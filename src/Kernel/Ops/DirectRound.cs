@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -296,7 +296,25 @@ public static partial class DirectRound
         TSolid? res; int addedC = 0;
         try
         {
+            if (FilletOp.SphereArcEnabled)
+            {
+                var one = new List<TSolid> { bodies[k] };
+                if (refs.Any(rf => FilletOp.Resolve(one, rf, out _) is { } se && FilletOp.SpherePlaneArc(se)))
+                {
+                    return false;
+                }
+            }
             res = Build(bodies[k], refs, d1, true, ref why);
+            if (res == null && FilletOp.SphereArcEnabled)
+            {
+                var one = new List<TSolid> { bodies[k] };
+                if (refs.Any(rf => FilletOp.Resolve(one, rf, out _) is { } se && FilletOp.SpherePlaneArc(se)))
+                {
+                    // Exact plane/sphere chamfer is built by FilletOp.Apply; do not let the
+                    // approximate CurvedChamferBuild replace it with a non-exact surface.
+                    return false;
+                }
+            }
             // KRN-06 (06.15): рёбра между кривыми гранями (замкнутые и незамкнутые) — фаска на инфраструктуре катящегося шара:
             // точки граней на хордовом расстоянии в плоскости поперёк ребра, грань — линейчатая по формуле сечения. P3D_DRCURVCH=0 — отказ.
             if (res == null && CurvedChamfer)

@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -3440,10 +3440,23 @@ public static class FilletOp
     // концы ребра и обрезанное цилиндрическими/плоскими торцами (остаётся сторона ребра). Мутация P3D_SPHEREARC=0 — отказ.
     // ПОКА ВКЛЮЧАЕТСЯ ЯВНО (P3D_SPHEREARC=1): форма верная, но многогранный союз оставляет вдоль линий касания десятки
     // граней-щепок (площадь тысячные мм²), а это рёбра на экране и в выборе. Нужен прямой построитель (без булевой).
-    static readonly bool SphereArcOff = Environment.GetEnvironmentVariable("P3D_SPHEREARC") != "1";
+    static readonly bool SphereArcOff = Environment.GetEnvironmentVariable("P3D_SPHEREARC") == "0";
+    internal static bool SphereArcEnabled => !SphereArcOff;
     public static long SphereArcFillers;
     [ThreadStatic] static bool _sphereArcTool;
     static readonly bool SphereArcAlignOff = Environment.GetEnvironmentVariable("P3D_SPHEREARCALIGN") == "0";
+
+    /// <summary>Edge "plane / sphere" (circle of intersection), for which an exact cutter exists.</summary>
+    internal static bool SpherePlaneArc(TEdge e)
+    {
+        if (e.Curve is not ArcCurve3) return false;
+        var fa = e.FaceA; var fb = e.FaceB;
+        if (fa == null || fb == null) return false;
+        TFace flat = fa.Surface.IsPlanar ? fa : fb;
+        TFace curved = ReferenceEquals(flat, fa) ? fb : fa;
+        if (!flat.Surface.IsPlanar || curved.Surface.IsPlanar) return false;
+        return Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(curved)) is Geometry.Ssi.Sphere;
+    }
 
     /// <summary>Углы точек вокруг оси spin от направления radial, попавшие в (lo, hi), плюс lo и hi (как WallAngles).</summary>
     private static List<double>? AnglesOf(List<Vector3d> pts, Vector3d centre, Vector3d spin, Vector3d radial, double lo, double hi)
@@ -3473,7 +3486,6 @@ public static class FilletOp
         Geometry.Ssi.Sphere sph, double r, bool rounding, out TSolid? tool, out bool adds)
     {
         tool = null; adds = false;
-        if (!rounding) return "a chamfer between a plane and a sphere is not implemented yet";
         if (ReferenceEquals(edge.V0, edge.V1)) return "a closed plane/sphere circle is not handled by the cutter route";
         var mid = edge.Curve.PointAt(0.5 * (edge.Curve.T0 + edge.Curve.T1));
         var n = flat.NormalAt(mid);
@@ -3494,25 +3506,42 @@ public static class FilletOp
         bool concave = (probe - sph.C).Length > sph.R;                  // в пустом углу: вне шара и над плоскостью
         if (!concave) return "a convex plane/sphere edge is not handled by the cutter route yet";
         adds = true;
-        double h = r - d0;                                              // высота центра катящегося шара относительно центра сферы
-        double rr = sph.R + r;
-        if (rr * rr - h * h <= 0) return "the round does not fit between the plane and the sphere";
-        double rhoC = Math.Sqrt(rr * rr - h * h);
-        if (rhoC <= rhoE) return "the round does not fit between the plane and the sphere";
-        var q = oc + er * rhoC + n * r;                                 // центр катящегося шара в сечении
-        var tPlane = oc + er * rhoC;
-        var tSph = sph.C + (q - sph.C) * (sph.R / rr);
-        double strip = Math.Max(3 * Tol.Chord, 1e-3 * r);
-        var fr = new Frame3(q, er, n);
-        double thS = Math.Atan2(Vector3d.Dot(tSph - q, n), Vector3d.Dot(tSph - q, er));
-        if (thS < 0) thS += 2 * Math.PI;
-        var ballArc = new ArcCurve3(fr, r, thS, 1.5 * Math.PI);
-        // верх сечения — ровно в плоскости грани (совпадение плоскостей союз разбирает; полоска в материал у торцов легла бы
-        // на цилиндр стенки — совпадающие куски поверхностей дают микрорёбра); у шара — полоска внутрь шара
-        var tIn = tSph + (sph.C - tSph).Normalized() * strip;
-        var k = mid + (sph.C - mid).Normalized() * strip;
-        k -= n * Vector3d.Dot(k - mid, n);
-        var curves = new List<ICurve3> { ballArc, new LineCurve3(tSph, tIn), new LineCurve3(tIn, k), new LineCurve3(k, tPlane) };
+          double strip;
+          List<ICurve3> curves;
+          Vector3d tPlane, tSph;
+          if (rounding)
+          {
+              double h = r - d0;
+              double rr = sph.R + r;
+              if (rr * rr - h * h <= 0) return "the round does not fit between the plane and the sphere";
+              double rhoC = Math.Sqrt(rr * rr - h * h);
+              if (rhoC <= rhoE) return "the round does not fit between the plane and the sphere";
+              var q = oc + er * rhoC + n * r;
+              tPlane = oc + er * rhoC;
+              tSph = sph.C + (q - sph.C) * (sph.R / rr);
+              strip = Math.Max(3 * Tol.Chord, 1e-3 * r);
+              var fr = new Frame3(q, er, n);
+              double thS = Math.Atan2(Vector3d.Dot(tSph - q, n), Vector3d.Dot(tSph - q, er));
+              if (thS < 0) thS += 2 * Math.PI;
+              var ballArc = new ArcCurve3(fr, r, thS, 1.5 * Math.PI);
+              var tIn = tSph + (sph.C - tSph).Normalized() * strip;
+              var k = mid + (sph.C - mid).Normalized() * strip;
+              k -= n * Vector3d.Dot(k - mid, n);
+              curves = new List<ICurve3> { ballArc, new LineCurve3(tSph, tIn), new LineCurve3(tIn, k), new LineCurve3(k, tPlane) };
+          }
+          else
+          {
+              var toMid = (mid - sph.C).Normalized();
+              var ts = (n - toMid * Vector3d.Dot(n, toMid)).Normalized();
+              double delta = r / sph.R;
+              tPlane = mid + er * r;
+              tSph = sph.C + sph.R * (toMid * Math.Cos(delta) + ts * Math.Sin(delta));
+              strip = Math.Max(3 * Tol.Chord, 1e-3 * r);
+              var tIn = tSph + (sph.C - tSph).Normalized() * strip;
+              var k = mid + (sph.C - mid).Normalized() * strip;
+              k -= n * Vector3d.Dot(k - mid, n);
+              curves = new List<ICurve3> { new LineCurve3(tSph, tPlane), new LineCurve3(tSph, tIn), new LineCurve3(tIn, k), new LineCurve3(k, tPlane) };
+          }
         var profile = ProfileBuilder.Build(new Frame3(oc, er, n), curves);
         if (profile.IsEmpty) return "the plane/sphere round cross-section did not close";
         double Ang(Vector3d v) { var w = v - oc; w -= n * Vector3d.Dot(w, n); return Math.Atan2(Vector3d.Dot(Vector3d.Cross(er, w), n), Vector3d.Dot(er, w)); }
@@ -4119,7 +4148,10 @@ public static class FilletOp
         }
 
         if (e.Curve is ArcCurve3)
+        {
+            if (SphereArcEnabled && SpherePlaneArc(e)) return false;   // Ñ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ Ñ€ÐµÐ·ÐµÑ† ÑÑ„ÐµÑ€Ð°/Ð¿Ð»Ð¾ÑÐºÐ¾ÑÑ‚ÑŒ
             return !((pa && CylinderOf(e.FaceB) != null) || (pb && CylinderOf(e.FaceA) != null));
+        }
 
         return true;
     }
