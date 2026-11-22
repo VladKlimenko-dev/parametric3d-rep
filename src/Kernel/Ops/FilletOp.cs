@@ -1225,13 +1225,18 @@ public static class FilletOp
                     }
                 }
                 // k156: отказ прибавки (негодный стык) — как откат: тело прежнее, резец считается откатившимся
-                try { BooleanOp.Unite(bodies, toolU, warnings); }
+                try
+                {
+                    if (_sphereArcTool) BooleanOp.AnalyticOnly = true;
+                    BooleanOp.Unite(bodies, toolU, warnings);
+                }
                 catch (RebuildException ex) when (!ReorderOff && jobs.Count > 1 && !reordered)
                 {
                     bodies.Clear(); bodies.AddRange(before); rolledBack++;
                     warnings.Add($"{what}: the addition on edge {Show(wanted.Start)}-{Show(wanted.End)} was refused — {ex.Message}");
                     continue;
                 }
+                finally { if (_sphereArcTool) { BooleanOp.AnalyticOnly = false; _sphereArcTool = false; } }
             }
             else if (PreviewCsgNow && bodies.Count == 1 && MeshCsg(bodies[0], tool, subtract: true) is { } quick)
             {
@@ -3437,6 +3442,7 @@ public static class FilletOp
     // граней-щепок (площадь тысячные мм²), а это рёбра на экране и в выборе. Нужен прямой построитель (без булевой).
     static readonly bool SphereArcOff = Environment.GetEnvironmentVariable("P3D_SPHEREARC") != "1";
     public static long SphereArcFillers;
+    [ThreadStatic] static bool _sphereArcTool;
     static readonly bool SphereArcAlignOff = Environment.GetEnvironmentVariable("P3D_SPHEREARCALIGN") == "0";
 
     /// <summary>Углы точек вокруг оси spin от направления radial, попавшие в (lo, hi), плюс lo и hi (как WallAngles).</summary>
@@ -3603,6 +3609,7 @@ public static class FilletOp
         }
         PreClipped.AddOrUpdate(tool, true);
         Interlocked.Increment(ref SphereArcFillers);
+        _sphereArcTool = true;
         return null;
     }
 

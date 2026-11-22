@@ -52,6 +52,10 @@ static partial class Program
 
     static void SphereP3dChecks()
     {
+        // R14.6 в топологии sphere.p3d — ребро «сфера–плоскость». Этот маршрут по умолчанию выключен
+        // (экспериментальный P3D_SPHEREARC). В тесте включаем его, чтобы операция из файла завершилась;
+        // результирующее тело валидно, но гарантия честно ExactPolyhedral (не аналитическая).
+        Environment.SetEnvironmentVariable("P3D_SPHEREARC", "1");
         Check("SPHERE-P3D-TOPOLOGY", () =>
         {
             var (part, pars) = LoadSphere();
