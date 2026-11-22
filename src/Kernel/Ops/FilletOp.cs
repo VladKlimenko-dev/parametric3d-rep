@@ -3559,8 +3559,6 @@ public static class FilletOp
                 }
             }
         }
-        if (Environment.GetEnvironmentVariable("P3D_SPHEREARCDBG") == "1")
-            Console.WriteLine($"SPHEREARC round {GeometryAudit.AuthoritativeSurface(round)?.GetType().Name} segs {(GeometryAudit.AuthoritativeSurface(round) as RevolvedSurface)?.AngularSegments} angles {(GeometryAudit.AuthoritativeSurface(round) as RevolvedSurface)?.Angles?.Length} axis {(GeometryAudit.AuthoritativeSurface(round) as RevolvedSurface)?.Axis.W} n {n} breaks {breaks?.Count}");
         var made = RevolveOp.Build(profile, Frame3.FromNormal(oc, n), lo - ext, hi + ext, breaks);
         var cur = new List<TSolid> { made }; var w = new List<string>();
         var (blo, bhi) = (made.Bounds.Min, made.Bounds.Max);
@@ -3601,12 +3599,6 @@ public static class FilletOp
             cur = new List<TSolid> { res.OrderBy(x => (x.Bounds.Center - mid).Length).First() };
         }
         tool = cur[0];
-        if (Environment.GetEnvironmentVariable("P3D_SPHEREARCDBG") == "1")
-        {
-            Console.WriteLine($"SPHEREARC ends {string.Join(",", ends.Select(f => Geometry.ExactEdges.ShapeOf(GeometryAudit.AuthoritativeSurface(f))?.GetType().Name))} lo {lo:F3} hi {hi:F3} ext {ext:F3} rhoE {rhoE:F3} rhoC {rhoC:F3} tool faces {tool.Faces.Count()} vol {AnalyticVolume.Of(tool)}");
-            using var ow = new StreamWriter("/tmp/claude-0/rb/spherearc_tool.obj");
-            Export.MeshExport.WriteObj(ow, Export.MeshExport.Triangles(new[] { tool }), "tool");
-        }
         PreClipped.AddOrUpdate(tool, true);
         Interlocked.Increment(ref SphereArcFillers);
         _sphereArcTool = true;
