@@ -197,6 +197,23 @@ public static partial class ExactFaceMesher
                 }
                 break;
             }
+        case Surfaces.NurbsSurface ns:
+        {
+            var mid = hint ?? all.Aggregate(Vector3d.Zero, (s, p) => s + p) / all.Count;
+            var n0 = ns.NormalAt(ns.ProjectToUV(mid)); if (n0.LengthSquared < 1e-18) break;
+            var w = n0.Normalized();
+            var (u, v) = Perp(w);
+            var o = mid;
+            maps.Add(new ConformalMap
+            {
+                Kind = "nurbs-plane",
+                Fwd = p => { var d = p - o; return new Vector2d(Vector3d.Dot(d, u), Vector3d.Dot(d, v)); },
+                Inv = q => { var r = ns.ProjectExtended(o + u * q.X + v * q.Y); return r?.P ?? new Vector3d(double.NaN); },
+                Normal = p => { var nn = ns.NormalAt(ns.ProjectToUV(p)); return nn.LengthSquared > 0 ? nn.Normalized() : nn; },
+                Dist = p => { var r = ns.ProjectExtended(p); return r is { } rr ? (rr.P - p).Length : 1e9; },
+            });
+            break;
+        }
         }
         return maps;
     }
