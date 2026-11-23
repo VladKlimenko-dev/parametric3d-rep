@@ -703,6 +703,12 @@ public static class SolidValidator
     {
         var solid = faces.FirstOrDefault()?.Shell?.Solid;
         if (solid == null || solid.TopologyConvention < TopologyConventions.Version) return;
+        // Импортированное тело (Unspecified) с NURBS-гранями: точный объём B-сплайнов может быть ненадёжен
+        // (зависит от стороны и параметризации); сетка уже проверена отдельно. P3D_VOLSIGNNURBS=0 — прежняя проверка.
+        if (solid.Guarantee == GuaranteeLevel.Unspecified
+            && solid.Faces.Any(f => GeometryAudit.AuthoritativeSurface(f) is Parametric3D.Kernel.Surfaces.NurbsSurface)
+            && Environment.GetEnvironmentVariable("P3D_VOLSIGNNURBS") != "0")
+            return;
         double? v;
         if (VolDbg) Console.WriteLine($"VOLSIGN solid {System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(solid):x} rev {solid.Revision} fp {TopoFingerprint.Of(solid):x} {string.Join(" < ", Environment.StackTrace.Split('\n').Skip(3).Take(4).Select(l => l.Trim().Split(" in ")[0]))}");
         try { v = AnalyticVolume.Of(solid); } catch { return; }
