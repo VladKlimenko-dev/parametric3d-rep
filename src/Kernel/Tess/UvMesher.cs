@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Surfaces;
 using Parametric3D.Kernel.Topology;
@@ -471,6 +471,14 @@ public static class UvMesher
         // неизменны), а доводка пересчитывала её у всех треугольников на каждом проходе (4 точки поверхности на треугольник).
         // Мутация P3D_UVBADMEMO=0.
         var badMemo = new Dictionary<(int, int, int), double>();
+            var edgeBad = new Dictionary<(int, int), double>();
+            double EdgeBad(int a, int b)
+            {
+                int x = a < b ? a : b, y = a < b ? b : a;
+                ref double slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(edgeBad, (x, y), out bool known);
+                if (!known) slot = (P((uvList[x] + uvList[y]) / 2) - (xyz[x] + xyz[y]) / 2).Length;
+                return slot;
+            }
         double Bad(int t)
         {
             if (BadMemoOff) return BadCore(t);
@@ -494,7 +502,7 @@ public static class UvMesher
             foreach (var (x, y) in new[] { (i0, i1), (i1, i2), (i2, i0) })
             {
                 var e = x < y ? (x, y) : (y, x);
-                if (!boundary.Contains(e)) w = Math.Max(w, (P((uvList[x] + uvList[y]) / 2) - (xyz[x] + xyz[y]) / 2).Length);
+                  if (!boundary.Contains(e)) w = Math.Max(w, EdgeBad(x, y));
             }
             return w;
         }
