@@ -194,7 +194,10 @@ public static class OcctBrepReader
             if (ec == null && c.D != default)
                 ec = new LineCurve3(c.O + c.D * r.T0, c.O + c.D * r.T1);
             if (ec == null) { warnings?.Add($"BREP: edge {num} lacks a curve"); return null; }
-            edges[num] = new TEdge { V0 = vertices[vr[0].Index]!, V1 = vertices[vr[1].Index]!, Curve = ec, Tolerance = r.Tolerance };
+            var va = vertices[vr[0].Index]!; var vb = vertices[vr[1].Index]!;
+            if ((ec.PointAt(ec.T0) - va.P).LengthSquared > (ec.PointAt(ec.T0) - vb.P).LengthSquared)
+                (va, vb) = (vb, va);
+            edges[num] = new TEdge { V0 = va, V1 = vb, Curve = ec, Tolerance = r.Tolerance };
         }
 
         for (int i = 0; i < recs.Count; i++)
