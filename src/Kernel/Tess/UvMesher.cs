@@ -920,6 +920,10 @@ public static class UvMesher
                 for (int t = 0; t < T.Count; t += 3)
                 {
                     var a0 = uvList[T[t]]; var b0 = uvList[T[t + 1]]; var c0 = uvList[T[t + 2]];
+                    // k196: шововая щепка — две вершины с одной и той же точкой пространства (обе копии шва).
+                    bool seamSliver = (xyz[T[t]] - xyz[T[t + 1]]).LengthSquared <= 1e-18
+                                   || (xyz[T[t + 1]] - xyz[T[t + 2]]).LengthSquared <= 1e-18
+                                   || (xyz[T[t]] - xyz[T[t + 2]]).LengthSquared <= 1e-18;
                     double spanU = Math.Max(a0.X, Math.Max(b0.X, c0.X)) - Math.Min(a0.X, Math.Min(b0.X, c0.X));
                     double spanV = Math.Max(a0.Y, Math.Max(b0.Y, c0.Y)) - Math.Min(a0.Y, Math.Min(b0.Y, c0.Y));
                     // KRN-03: треугольник с двумя вершинами на линии полюса (одна точка пространства) сварка убирает — его
@@ -932,6 +936,17 @@ public static class UvMesher
                         {
                             spanU = rest.Count < 2 ? 0 : Math.Abs(rest[0].X - rest[1].X);
                             spanV = rest.Count < 2 ? 0 : Math.Abs(rest[0].Y - rest[1].Y);
+                        }
+                    }
+                    if (seamSliver)
+                    {
+                        // Размах по периоду считаем по РАЗНЫМ точкам пространства: склеенные копии шва
+                        // (одна и та же точка) сварка уберёт, поэтому они не соединяют разные стороны шва.
+                        var distinct = new[] { T[t], T[t + 1], T[t + 2] }.GroupBy(i => xyz[i]).Select(g => g.First()).ToList();
+                        if (distinct.Count >= 2)
+                        {
+                            spanU = distinct.Max(i => uvList[i].X) - distinct.Min(i => uvList[i].X);
+                            spanV = distinct.Max(i => uvList[i].Y) - distinct.Min(i => uvList[i].Y);
                         }
                     }
                     if ((perU && spanU > 0.5) || (perV && spanV > 0.5)) { Debug?.Invoke($"seam span: uv {a0} {b0} {c0} xyz {xyz[T[t]]} {xyz[T[t + 1]]} {xyz[T[t + 2]]}"); why = "a triangle spans half the period across the seam"; return null; }

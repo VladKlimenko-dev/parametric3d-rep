@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using Parametric3D.Core;
 using Parametric3D.Kernel.Curves;
 using Parametric3D.Kernel.Surfaces;
@@ -1445,7 +1445,10 @@ public static partial class ExactFaceMesher
             if (MeshConformal(f, src, cycles, out cwhy2) is { } conf && Validate(f, src, conf.P, conf.T, out cwhy2) is { } confOk) { ConformalMeshed++; return confOk; }
             ConformalFailed++; return null;
         }
-        if (r == null)
+          if (src is Surfaces.NurbsSurface nsa && MeshPeriodicNurbsBand(f, nsa, cycles, out var nbWhy0) is { } nb0)
+          {
+              why = null; normals = null; return nb0;
+          }        if (r == null)
         {
             if (Conformal() is { } c1) { why = null; normals = null; return c1; }
             why += "; " + cwhy2; return null;
@@ -1453,6 +1456,10 @@ public static partial class ExactFaceMesher
         normals = r.Value.N;
         // Вложенная MeshLoops уже проверила результат для несвязной грани.
         var checkedR = r.Value.Validated ? (r.Value.P, r.Value.T) : Validate(f, src, r.Value.P, r.Value.T, out why);
+          if (src is Surfaces.NurbsSurface nsb && MeshPeriodicNurbsBand(f, nsb, cycles, out var nbWhy) is { } nb)
+          {
+              why = null; normals = null; return nb;
+          }
         if (checkedR != null) return checkedR;
         if (Conformal() is { } c2) { why = null; normals = null; return c2; }
         why += "; " + cwhy2; return null;

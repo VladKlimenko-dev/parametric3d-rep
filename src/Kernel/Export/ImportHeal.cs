@@ -219,6 +219,7 @@ public static class ImportHeal
             }
             if (raised > 0) warnings?.Add($"Import: {label}: tolerance of {raised} edge(s) set from the curve-to-surface gap (max {maxDev:G3} mm).");
         }
+        NurbsEdgeSnap.Apply(b, warnings);
         var vr = SolidValidator.ValidateBRep(b);
         bool overBudget = maxGap > budget;
         bool valid = vr.IsValid && openLeft == 0 && !overBudget && problem == null;
