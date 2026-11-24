@@ -820,7 +820,7 @@ public static class UvMesher
                         {
                             var e = x < y ? (x, y) : (y, x);
                             if (boundary.Contains(e)) continue;
-                            double we = (P((uvList[x] + uvList[y]) / 2) - (xyz[x] + xyz[y]) / 2).Length;
+                            double we = EdgeBad(x, y);
                             if (we > best * 1.2) { best = we; be = e; }
                         }
                         if (be is { } ee)
