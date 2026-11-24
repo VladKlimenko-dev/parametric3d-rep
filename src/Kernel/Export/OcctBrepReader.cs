@@ -61,7 +61,7 @@ public static class OcctBrepReader
                 }
                 var knots = new double[nKnots]; var mults = new int[nKnots];
                 for (int k = 0; k < nKnots; k++) { knots[k] = D(); mults[k] = I(); }
-                curves[i] = (new SplineCurve3(poles, deg, rat ? w : null, ExpandKnots(knots, mults)), default, default);
+                curves[i] = (new SplineCurve3(poles, deg, rat ? w : null, ExpandKnots(knots, mults)).WithUnitKnots(), default, default);
             }
             else { warnings?.Add($"BREP: curve type {type} not supported"); return null; }
         }
