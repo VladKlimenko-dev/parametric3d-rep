@@ -480,7 +480,7 @@ public static class Tessellator
         // восстанавливается по соседям так же, как у гранёных квадрик. Мутация P3D_NURBSSLIVERWIND=0.
         if (Environment.GetEnvironmentVariable("P3D_NURBSSLIVERWIND") != "0")
             foreach (var q in faces)
-                if (q.Surface is Surfaces.FacetedSurface fq2 && fq2.Source is Surfaces.NurbsSurface && (q.Tag ?? "").Contains("loft:side"))
+                if (q.Surface is Surfaces.FacetedSurface fq2 && fq2.Source is Surfaces.NurbsSurface && ((q.Tag ?? "").Contains("loft:side") || (q.Tag ?? "").Contains("step:")))
                     set.Add(q.Id);
         return set;
     }
