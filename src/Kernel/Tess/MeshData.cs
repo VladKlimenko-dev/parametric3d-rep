@@ -117,6 +117,7 @@ public sealed class MeshBuilder
     // Точному ядру нужна сетка 1e-5 мм, и float её не держит вовсе.
     private readonly List<Vector3d> _pd = new();
     private readonly List<uint> _boundary = new();
+    static readonly bool BoundaryWeldOff = Environment.GetEnvironmentVariable("P3D_BOUNDARYWELD") == "0";
 
     /// <summary>Координаты вершин в двойной точности, в порядке добавления.</summary>
     public IReadOnlyList<Vector3d> PositionsD => _pd;
@@ -443,6 +444,34 @@ public sealed class MeshBuilder
         }
         int G(int i) => F(gOf[i]);
         Vector3d Pos(int g) => pts[g];
+        // 1.5. ТОПОЛОГИЧЕСКАЯ СВАРКА ШВА: вершины с одинаковой меткой граничного полуребра обязаны
+        // совпадать. Если их позиции разошлись из-за независимой разметки соседних граней, сводим их в
+        // одно скопление ДО построения треугольников. Порог — тот же допуск float, но не более 64 шагов:
+        // это чинит швы, не сжимая далёкую некорректную топологию.
+        if (!BoundaryWeldOff)
+        {
+            var byTag = new Dictionary<uint, List<int>>();
+            for (int i = 0; i < nV; i++)
+            {
+                if (_boundary[i] == uint.MaxValue) continue;
+                if (!byTag.TryGetValue(_boundary[i], out var l)) byTag[_boundary[i]] = l = new List<int>();
+                l.Add(i);
+            }
+            double weldTol = ceps * 64;
+            foreach (var (tag, list) in byTag)
+            {
+                if (list.Count < 2) continue;
+                // Сводим попарно, а не «все или ничего»: дальние вершины с тем же тегом не должны
+                // отменять близкую сварку шва.
+                for (int x = 0; x < list.Count; x++)
+                    for (int y = x + 1; y < list.Count; y++)
+                    {
+                        if ((_pd[list[x]] - _pd[list[y]]).Length > weldTol) continue;
+                        int a = F(gOf[list[x]]), b = F(gOf[list[y]]);
+                        if (a != b) par[Math.Max(a, b)] = Math.Min(a, b);
+                    }
+            }
+        }
         // 2. треугольники в общих номерах
         var tris = new List<(int A, int B, int C, uint Face, int Src)>();
         for (int t = 0; t + 2 < _i.Count; t += 3)

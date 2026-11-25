@@ -87,28 +87,36 @@ public static class Tessellator
         if (T.Count < 3) return false;
 
         int start = mb.VertexCount;
+        // Топологическая метка границы: для каждой граничной кромки заранее готовим точки. Вершина сетки,
+        // лежащая на единственной кромке (не в углу), получает ID этой кромки. По этому ID соседние грани
+        // свариваются даже при расхождении позиций на несколько ULP.
+        var edgeSamples = new List<(uint Edge, Vector3d[] Pts)>();
+        foreach (var l in f.Loops)
+            foreach (var ce in l.CoEdges)
+            {
+                if (ce.Edge.Curve == null) continue;
+                var ep = new List<Vector3d>(); ce.Tessellate(ep, true);
+                if (ep.Count > 1) edgeSamples.Add((ce.Edge.Id, ep.ToArray()));
+            }
+        const double tagTol = 2e-4;
         for (int i = 0; i < P.Count; i++)
         {
             var p = P[i];
             Vector3d n = f.Surface.NormalAt(f.Surface.ProjectToUV(p));
             if (f.Reversed) n = -n;
             int vi = mb.AddVertex(p, n);
-            if (f.Loops.Count == 1 && f.Loops[0].CoEdges.Count == 1)
+            if (edgeSamples.Count == 0) continue;
+            uint bestEdge = 0; double best = double.MaxValue; int hits = 0;
+            foreach (var (eid, pts) in edgeSamples)
             {
-                var ce = f.Loops[0].CoEdges[0];
-                if (ce.Edge.Curve != null)
+                for (int s = 0; s < pts.Length; s++)
                 {
-                    double t0 = ce.Edge.Curve.T0, t1 = ce.Edge.Curve.T1;
-                    double best = double.MaxValue;
-                    for (int s = 0; s <= 32; s++)
-                    {
-                        var q = ce.Edge.Curve.PointAt(t0 + (t1 - t0) * s / 32.0);
-                        double d = (q - p).LengthSquared;
-                        if (d < best) best = d;
-                    }
-                    if (best < 1e-12) mb.TagBoundaryVertex(vi, ce.Edge.Id);
+                    double d = (pts[s] - p).LengthSquared;
+                    if (d < best) { best = d; bestEdge = eid; hits = 1; }
+                    else if (d == best && eid != bestEdge) hits++;
                 }
             }
+            if (best <= tagTol * tagTol && hits == 1) mb.TagBoundaryVertex(vi, bestEdge);
         }
 
         for (int i = 0; i + 2 < T.Count; i += 3)
