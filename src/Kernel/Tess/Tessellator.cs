@@ -87,11 +87,28 @@ public static class Tessellator
         if (T.Count < 3) return false;
 
         int start = mb.VertexCount;
-        foreach (var p in P)
+        for (int i = 0; i < P.Count; i++)
         {
+            var p = P[i];
             Vector3d n = f.Surface.NormalAt(f.Surface.ProjectToUV(p));
             if (f.Reversed) n = -n;
-            mb.AddVertex(p, n);
+            int vi = mb.AddVertex(p, n);
+            if (f.Loops.Count == 1 && f.Loops[0].CoEdges.Count == 1)
+            {
+                var ce = f.Loops[0].CoEdges[0];
+                if (ce.Edge.Curve != null)
+                {
+                    double t0 = ce.Edge.Curve.T0, t1 = ce.Edge.Curve.T1;
+                    double best = double.MaxValue;
+                    for (int s = 0; s <= 32; s++)
+                    {
+                        var q = ce.Edge.Curve.PointAt(t0 + (t1 - t0) * s / 32.0);
+                        double d = (q - p).LengthSquared;
+                        if (d < best) best = d;
+                    }
+                    if (best < 1e-12) mb.TagBoundaryVertex(vi, ce.Edge.Id);
+                }
+            }
         }
 
         for (int i = 0; i + 2 < T.Count; i += 3)

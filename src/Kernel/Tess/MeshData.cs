@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using OpenTK.Mathematics;
 
 namespace Parametric3D.Kernel.Tess;
@@ -116,6 +116,7 @@ public sealed class MeshBuilder
     // склейки вершин 1e-6 мм. Склейка не могла срабатывать надёжно.
     // Точному ядру нужна сетка 1e-5 мм, и float её не держит вовсе.
     private readonly List<Vector3d> _pd = new();
+    private readonly List<uint> _boundary = new();
 
     /// <summary>Координаты вершин в двойной точности, в порядке добавления.</summary>
     public IReadOnlyList<Vector3d> PositionsD => _pd;
@@ -140,6 +141,7 @@ public sealed class MeshBuilder
             v.FaceId = _curFace;
             _v.Add(v);
             _pd.Add(other._pd[i]);
+            _boundary.Add(i < other._boundary.Count ? other._boundary[i] : uint.MaxValue);
         }
         foreach (int idx in other._i) _i.Add(idx + shift);
     }
@@ -180,7 +182,14 @@ public sealed class MeshBuilder
             FaceId = _curFace,
             Flags = 0
         });
+        _boundary.Add(uint.MaxValue);
         return _v.Count - 1;
+    }
+
+    public void TagBoundaryVertex(int idx, uint tag)
+    {
+        while (_boundary.Count <= idx) _boundary.Add(uint.MaxValue);
+        _boundary[idx] = tag;
     }
 
     public void AddTriangle(int a, int b, int c)
