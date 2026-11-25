@@ -55,6 +55,8 @@ static partial class Program
                 sldStage = $"validate (convert {tConv:F0} ms, read {sw.Elapsed.TotalMilliseconds - tConv:F0} ms)";
                 var bodies = part?.Bodies ?? new List<TSolid>();
                 var b = bodies.FirstOrDefault();
+                if (Environment.GetEnvironmentVariable("P3D_SLDSTRICT") == "1")
+                    Environment.SetEnvironmentVariable("P3D_BOUNDARYWELD", "1");
                 var vrs = bodies.Select(x => SolidValidator.Validate(x)).ToList();
                 var vr = vrs.FirstOrDefault(x => !x.IsValid) ?? vrs.FirstOrDefault();
                 if (Environment.GetEnvironmentVariable("P3D_SLDDIAG") == "1") SldDiag(Path.GetFileName(path), bodies, vrs);
@@ -80,8 +82,6 @@ static partial class Program
                 if (good) Interlocked.Increment(ref sldGood);
                 // обязательная планка — для файлов, которые уже годны (ГОДНЫЕ); остальные — для сведения (лог), пока импорт
                 // доводится (k183+): провал такого файла не валит прогон
-                if (Environment.GetEnvironmentVariable("P3D_SLDSTRICT") == "1")
-            Environment.SetEnvironmentVariable("P3D_BOUNDARYWELD", "1");
                 Require(!truncated, "XT stream not read to the end");
                 Require(!w.Any(x => x.Contains("were left out") || x.Contains("is not supported; the edge")), "faces or edges left out: " + string.Join(" | ", w.Where(x => x.Contains("left out"))));
                 Require(bodies.Count == xtBodies, $"bodies {bodies.Count} of {xtBodies}");

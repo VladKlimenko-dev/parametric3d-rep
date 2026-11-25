@@ -395,7 +395,12 @@ public static class Tessellator
         // треугольники появляются при сведении точек соседних граней; для показа и расчёта они
         // вредны, а булева читает те же треугольники и без них распадается — измерено, двадцать
         // одна проверка ядра. Поэтому чистка стоит здесь, а не в самой сборке.
-        using (Diagnostics.Prof.Time("  показ: сборка сетки")) mb.FillInto(md, weld: true, fine: polyAuth && PolyFacetsOnly && PolyFine);
+        using (Diagnostics.Prof.Time("  показ: сборка сетки"))
+        {
+            bool importedBoundaryWeld = Environment.GetEnvironmentVariable("P3D_BOUNDARYWELD") == "1"
+                && (solid.Guarantee == GuaranteeLevel.Unspecified || solid.Faces.Any(f => GeometryAudit.AuthoritativeSurface(f) is Surfaces.NurbsSurface));
+            mb.FillInto(md, weld: true, fine: polyAuth && PolyFacetsOnly && PolyFine, importedBoundaryWeld: importedBoundaryWeld);
+        }
 
         // ОХВАТ СЕТКИ: 89 тел из ста вместо 90. Проверено, что ни общая разметка (P3D_QMESH=0),
         // ни запас габарита тут ни при чём — число то же. Значит, одно тело изменилось от

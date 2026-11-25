@@ -236,7 +236,7 @@ public sealed class MeshBuilder
     /// Отдать собранное. Сведение совпавших вершин — ТОЛЬКО ПО ПРОСЬБЕ: эту же сборку читает
     /// булева, и ей нужны треугольники ровно те, что дала разметка.
     /// </summary>
-    public void FillInto(MeshData md, bool weld = false, bool fine = false)
+    public void FillInto(MeshData md, bool weld = false, bool fine = false, bool importedBoundaryWeld = false)
     {
         _fine = fine;
         if (weld && fine && !CollapseOff)
@@ -251,6 +251,12 @@ public sealed class MeshBuilder
         }
         else if (weld) { CanonicalPositions(); WeldWithinFaces(); }
 
+        if (importedBoundaryWeld)
+        {
+            if (Environment.GetEnvironmentVariable("P3D_TOWELDDBG") == "1")
+                Console.Error.WriteLine("FillInto importedBoundaryWeld called");
+            TopologyBoundaryWeld();
+        }
         if (weld && !RangesFixOff) RebuildRanges();
         md.Vertices = _v.ToArray();
         md.Indices = _i.ToArray();
@@ -265,6 +271,48 @@ public sealed class MeshBuilder
     /// UI-REORDER-K104). Теперь треугольники упорядочиваются по граням (в прежнем порядке граней, устойчиво) и диапазоны
     /// считаются заново: номера — подряд, вершины — от наименьшей до наибольшей у грани. Мутация P3D_MESHRANGESFIX=0.
     /// </summary>
+    /// <summary>
+    /// Топологическая сварка граничных вершин импортированного тела. Соседние импортированные грани
+    /// (XT→STEP) часто дают чуть разные точки общего шва (доли допуска); здесь близкие граничные
+    /// вершины, принадлежащие РАЗНЫМ граням и имеющие одну геометрическую позицию, объединяются.
+    /// Внутри одной грани вершины уже сведены WeldWithinFaces.
+    /// </summary>
+    private void TopologyBoundaryWeld()
+    {
+        if (_boundary.Count == 0) return;
+        double tol = Core.Tol.Weld * 4;
+        var remap = new int[_v.Count];
+        for (int i = 0; i < _v.Count; i++) remap[i] = i;
+
+        // Группируем только граничные вершины по квантованной позиции.
+        var clusters = new Dictionary<(long, long, long), int>();
+        double scale = 1 / tol;
+        for (int i = 0; i < _v.Count; i++)
+        {
+            if (_boundary[i] == uint.MaxValue) continue;
+            var key = ((long)Math.Round(_pd[i].X * scale), (long)Math.Round(_pd[i].Y * scale), (long)Math.Round(_pd[i].Z * scale));
+            if (!clusters.TryGetValue(key, out int first)) { clusters[key] = i; continue; }
+            // Не свариваем вершины одной грани повторно.
+            if (_v[i].FaceId == _v[first].FaceId) continue;
+            remap[i] = first;
+        }
+
+        bool changed = false;
+        for (int i = 0; i < remap.Length; i++) if (remap[i] != i) { changed = true; break; }
+        if (Environment.GetEnvironmentVariable("P3D_TOWELDDBG") == "1")
+            Console.Error.WriteLine($"TopologyBoundaryWeld clusters={clusters.Count} changed={changed}");
+        if (!changed) return;
+
+        var newTris = new List<int>(_i.Count);
+        for (int t = 0; t + 2 < _i.Count; t += 3)
+        {
+            int a = remap[_i[t]], b = remap[_i[t + 1]], c = remap[_i[t + 2]];
+            if (a == b || b == c || c == a) continue;
+            newTris.Add(a); newTris.Add(b); newTris.Add(c);
+        }
+        _i.Clear(); _i.AddRange(newTris);
+    }
+
     private void RebuildRanges()
     {
         int nT = _i.Count / 3;
