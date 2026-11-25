@@ -812,6 +812,26 @@ public static class StepImport
     public static Func<TFace, string?>? DonorKeyProbe;
     /// <summary>Сколько раз грани тела размечались по контурам параллельно.</summary>
     public static long LoopMeshParallelRuns;
+    static (double, double, double, double, double, double) RoundEdge(Vector3d a, Vector3d b)
+    {
+        double s = 1e-4;
+        return (Math.Round(a.X * s) / s, Math.Round(a.Y * s) / s, Math.Round(a.Z * s) / s,
+                Math.Round(b.X * s) / s, Math.Round(b.Y * s) / s, Math.Round(b.Z * s) / s);
+    }
+
+    static uint TagFor(Dictionary<(double, double, double, double, double, double), uint> tags, Vector3d p)
+    {
+        uint best = uint.MaxValue; double bestD = 1e-4;
+        foreach (var (key, id) in tags)
+        {
+            var a = new Vector3d(key.Item1, key.Item2, key.Item3);
+            var b = new Vector3d(key.Item4, key.Item5, key.Item6);
+            double d = (a - p).Length;
+            if (d < bestD) { bestD = d; best = id; }
+        }
+        return best;
+    }
+
     internal static int MeshFacesFromLoops(TSolid solid, List<string>? warnings, string format,
                                            Func<TFace, Surfaces.FacetedSurface?>? donor = null)
     {
@@ -917,6 +937,22 @@ public static class StepImport
                 n2 += Vector3d.Cross(b2 - a2, c2 - a2);
             }
             if (fs2.Facets.Count == 0) { failed++; continue; }
+
+            var edgeTags = new Dictionary<(double, double, double, double, double, double), uint>();
+            foreach (var ce in f2.Loops.SelectMany(l => l.CoEdges))
+            {
+                var eq = Tess.ExactFaceMesher.EdgePoints(ce.Edge);
+                for (int k = 0; k + 1 < eq.Count; k++)
+                    edgeTags[RoundEdge(eq[k], eq[k + 1])] = ce.Edge.Id;
+            }
+            for (int i = 0; i + 2 < tri2.Count; i += 3)
+            {
+                Vector3d a = pts2[tri2[i]], b = pts2[tri2[i + 1]], c = pts2[tri2[i + 2]];
+                uint ta = TagFor(edgeTags, a), tb = TagFor(edgeTags, b), tc = TagFor(edgeTags, c);
+                fs2.BoundaryTags.Add(ta);
+                fs2.BoundaryTags.Add(tb);
+                fs2.BoundaryTags.Add(tc);
+            }
 
             // СТОРОНА ГРАНИ — ПО ФЛАГУ ИЗ ФАЙЛА И НОРМАЛИ ПОВЕРХНОСТИ. Построитель
             // определяет сторону сравнением с прежней сеткой, а у прочитанной грани её
