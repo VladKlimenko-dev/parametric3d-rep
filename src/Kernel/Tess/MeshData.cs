@@ -448,7 +448,7 @@ public sealed class MeshBuilder
         // совпадать. Если их позиции разошлись из-за независимой разметки соседних граней, сводим их в
         // одно скопление ДО построения треугольников. Порог — тот же допуск float, но не более 64 шагов:
         // это чинит швы, не сжимая далёкую некорректную топологию.
-        if (!BoundaryWeldOff)
+        if (!BoundaryWeldOff && Environment.GetEnvironmentVariable("P3D_BOUNDARYWELD") == "1")
         {
             var byTag = new Dictionary<uint, List<int>>();
             for (int i = 0; i < nV; i++)
@@ -457,7 +457,7 @@ public sealed class MeshBuilder
                 if (!byTag.TryGetValue(_boundary[i], out var l)) byTag[_boundary[i]] = l = new List<int>();
                 l.Add(i);
             }
-            double weldTol = ceps * 64;
+            double weldTol = ceps * 4;
             foreach (var (tag, list) in byTag)
             {
                 if (list.Count < 2) continue;
